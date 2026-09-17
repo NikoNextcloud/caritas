@@ -3,9 +3,6 @@ import { auth, database } from '../firebase';
 import { onAuthStateChanged, signInWithEmailAndPassword, signOut } from 'firebase/auth';
 import { ref, get } from 'firebase/database';
 
-console.log('Firebase auth initialized:', auth);
-console.log('Firebase database initialized:', database);
-
 const AuthContext = createContext();
 
 export function useAuth() {
@@ -19,42 +16,44 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      console.log('Auth state changed:', user);
       setCurrentUser(user);
-      if (user) {
-        try {
-          const userRef = ref(database, `users/${user.uid}`);
-          const snapshot = await get(userRef);
-          console.log('User data from database:', snapshot.val());
-          if (snapshot.exists()) {
-            setUserRole(snapshot.val().role);
-          }
-        } catch (error) {
-          console.error('Error fetching user data:', error);
-        }
-      } else {
-        setUserRole(null);
+      setUserRole(null);
+
+      if (!user) {
+        setLoading(false);
+        return;
       }
-      setLoading(false);
+
+      try {
+        const userRef = ref(database, `users/${user.uid}`);
+        const snapshot = await get(userRef);
+        if (snapshot.exists()) {
+          setUserRole(snapshot.val()?.role ?? null);
+        }
+      } catch (error) {
+        console.error('Error fetching user profile:', error);
+      } finally {
+        setLoading(false);
+      }
     });
+
     return unsubscribe;
   }, []);
 
   const login = async (email, password) => {
-    console.log('Attempting login with email:', email);
-    try {
-      const result = await signInWithEmailAndPassword(auth, email, password);
-      console.log('Login successful:', result.user);
-      return result;
-    } catch (error) {
-      console.error('Login failed:', error.code, error.message);
-      throw error;
-    }
+    if (!email || !password) throw new Error('Email and password are required');
+    return signInWithEmailAndPassword(auth, email.trim(), password);
   };
-  
+
   const logout = () => signOut(auth);
 
-  const value = { currentUser, userRole, login, logout, isAdmin: userRole === 'admin' };
+  const value = {
+    currentUser,
+    userRole,
+    login,
+    logout,
+    isAdmin: userRole === 'admin',
+  };
 
   return (
     <AuthContext.Provider value={value}>
