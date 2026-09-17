@@ -1,12 +1,59 @@
 import { useEffect, useMemo, useState } from 'react';
 import { database } from '../firebase';
 import { get, push, ref, remove, update } from 'firebase/database';
-import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { useAuth } from '../contexts/AuthContext';
 
-const storage = getStorage();
 const emptyForm = { photo: '', firstName: '', middleName: '', lastName: '', gender: '', birthDate: '', identifier: '', status: '', active: true, archived: false };
 const inputStyle = { width: '100%', boxSizing: 'border-box', padding: '9px', marginTop: '5px', border: '1px solid #ccc', borderRadius: '5px' };
+const MAX_PHOTO_BYTES = 300 * 1024;
+const MAX_PHOTO_DIMENSION = 500;
+
+function compressImage(file) {
+  return new Promise((resolve, reject) => {
+    const objectUrl = URL.createObjectURL(file);
+    const image = new Image();
+
+    image.onload = () => {
+      try {
+        const scale = Math.min(1, MAX_PHOTO_DIMENSION / Math.max(image.naturalWidth, image.naturalHeight));
+        const width = Math.max(1, Math.round(image.naturalWidth * scale));
+        const height = Math.max(1, Math.round(image.naturalHeight * scale));
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) throw new Error('Браузърът не поддържа обработка на изображения.');
+        ctx.drawImage(image, 0, 0, width, height);
+
+        let quality = 0.75;
+        const makeDataUrl = () => canvas.toDataURL('image/jpeg', quality);
+        let dataUrl = makeDataUrl();
+
+        while (dataUrl.length * 0.75 > MAX_PHOTO_BYTES && quality > 0.35) {
+          quality -= 0.05;
+          dataUrl = makeDataUrl();
+        }
+
+        if (dataUrl.length * 0.75 > MAX_PHOTO_BYTES) {
+          throw new Error('Снимката остава прекалено голяма след компресиране.');
+        }
+
+        resolve(dataUrl);
+      } catch (err) {
+        reject(err);
+      } finally {
+        URL.revokeObjectURL(objectUrl);
+      }
+    };
+
+    image.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      reject(new Error('Изображението не може да бъде обработено. Избери JPG или PNG снимка.'));
+    };
+
+    image.src = objectUrl;
+  });
+}
 
 export default function Beneficiaries() {
   const { currentUser } = useAuth();
@@ -27,7 +74,7 @@ export default function Beneficiaries() {
       const snapshot = await get(ref(database, 'beneficiaries'));
       if (!snapshot.exists()) { setBeneficiaries([]); return; }
       setBeneficiaries(Object.entries(snapshot.val()).map(([id, value]) => ({ id, ...value })));
-    } catch (err) { console.error(err); setError('Бенефициентите не могат да бъдат заредени.'); }
+    } catch (err) { console.error(err); setError(`Бенефициентите не могат да бъдат заредени: ${err.code || err.message}`); }
     finally { setLoading(false); }
   };
 
@@ -48,16 +95,17 @@ export default function Beneficiaries() {
     const file = e.target.files?.[0];
     if (!file || !currentUser) return;
     if (!file.type.startsWith('image/')) { setError('Моля, избери изображение.'); return; }
-    if (file.size > 5 * 1024 * 1024) { setError('Снимката трябва да е до 5 MB.'); return; }
     try {
       setUploading(true); setError('');
-      const temporaryId = editingId || push(ref(database, 'beneficiaries')).key;
-      const fileRef = storageRef(storage, `beneficiaries/${temporaryId}/${Date.now()}-${file.name}`);
-      await uploadBytes(fileRef, file, { contentType: file.type });
-      const url = await getDownloadURL(fileRef);
-      setForm(prev => ({ ...prev, photo: url }));
-    } catch (err) { console.error(err); setError(`Снимката не може да бъде качена: ${err.code || err.message}`); }
-    finally { setUploading(false); }
+      const compressedPhoto = await compressImage(file);
+      setForm(prev => ({ ...prev, photo: compressedPhoto }));
+    } catch (err) {
+      console.error(err);
+      setError(`Снимката не може да бъде обработена: ${err.message}`);
+    } finally {
+      setUploading(false);
+      e.target.value = '';
+    }
   };
 
   const openAdd = () => { setEditingId(null); setForm(emptyForm); setError(''); setShowForm(true); };
@@ -102,7 +150,7 @@ export default function Beneficiaries() {
     {showForm && <form onSubmit={handleSubmit} style={{ background: 'white', padding: 20, borderRadius: 8, boxShadow: '0 1px 3px rgba(0,0,0,0.1)', marginBottom: 20 }}>
       <h3 style={{ marginTop: 0 }}>{editingId ? 'Редактиране на бенефициент' : 'Нов бенефициент'}</h3>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 14 }}>
-        <label>Снимка<input style={inputStyle} type="file" accept="image/*" onChange={handlePhoto} disabled={uploading} />{form.photo && <img src={form.photo} alt="Преглед" style={{ display: 'block', marginTop: 8, width: 70, height: 70, objectFit: 'cover', borderRadius: 6 }} />}</label>
+        <label>Снимка<input style={inputStyle} type="file" accept="image/jpeg,image/png,image/webp" onChange={handlePhoto} disabled={uploading} />{uploading && <div style={{ marginTop: 6, color: '#666' }}>Обработване и компресиране...</div>}{form.photo && <img src={form.photo} alt="Преглед" style={{ display: 'block', marginTop: 8, width: 70, height: 70, objectFit: 'cover', borderRadius: 6 }} />}</label>
         <label>Име<input style={inputStyle} name="firstName" value={form.firstName} onChange={handleChange} required /></label>
         <label>Презиме<input style={inputStyle} name="middleName" value={form.middleName} onChange={handleChange} /></label>
         <label>Фамилия<input style={inputStyle} name="lastName" value={form.lastName} onChange={handleChange} required /></label>
