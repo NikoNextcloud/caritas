@@ -132,3 +132,107 @@ button, input, select, textarea { font: inherit; }
   .topbar-title { max-width: 125px; }
   .topbar-user { display: none; }
 }
+
+/* Final responsive navigation redesign */
+.topbar-left { display:flex; align-items:center; min-width:48px; }
+.mobile-menu-btn { display:none; width:40px; height:40px; border:1px solid #dfe3e7; border-radius:8px; background:#fff; color:#333c44; cursor:pointer; font-size:20px; align-items:center; justify-content:center; }
+.topbar { position:sticky; top:0; z-index:900; }
+.sidebar-backdrop { display:none; }
+
+.sidebar-brand { justify-content:center; position:relative; padding:0 52px; }
+.sidebar-logo { width:58px; height:46px; object-fit:contain; }
+.sidebar-toggle { position:absolute; right:14px; }
+.caritas-sidebar.collapsed .sidebar-brand { padding:0 8px; }
+.caritas-sidebar.collapsed .sidebar-logo { width:42px; height:42px; }
+.caritas-sidebar.collapsed .sidebar-toggle { position:static; margin:0; display:none; }
+
+@media (min-width: 901px) {
+  .caritas-sidebar { width:245px; flex-basis:245px; }
+  .caritas-sidebar.collapsed { width:78px; flex-basis:78px; }
+  .caritas-sidebar.collapsed .sidebar-brand { padding:0 8px; }
+  .caritas-sidebar.collapsed .sidebar-logo { width:46px; height:46px; }
+}
+
+@media (max-width: 900px) and (min-width: 601px) {
+  .caritas-sidebar { width:82px; flex-basis:82px; }
+  .caritas-sidebar:not(.collapsed) { width:245px; flex-basis:245px; }
+  .caritas-sidebar:not(.collapsed) .sidebar-brand { padding:0 52px; }
+  .caritas-sidebar:not(.collapsed) .sidebar-brand > .sidebar-toggle { right:14px; }
+  .caritas-sidebar:not(.collapsed) .sidebar-item > span:not(.sidebar-icon),
+  .caritas-sidebar:not(.collapsed) .sidebar-user,
+  .caritas-sidebar:not(.collapsed) .sidebar-section { display:block; }
+  .caritas-sidebar.collapsed .sidebar-item > span:not(.sidebar-icon),
+  .caritas-sidebar.collapsed .sidebar-user,
+  .caritas-sidebar.collapsed .sidebar-section { display:none; }
+  .content-area { padding:18px; }
+}
+
+@media (max-width: 600px) {
+  .admin-layout { display:block; min-height:100vh; }
+  .admin-main { width:100%; min-height:100vh; }
+  .mobile-menu-btn { display:flex; }
+  .topbar { height:60px; padding:0 10px; }
+  .topbar-left { min-width:40px; }
+  .topbar-actions { gap:8px; }
+  .topbar-user { display:flex; }
+  .topbar-user > span:not(.avatar) { display:none; }
+  .logout-link { padding:7px 4px; }
+  .content-area { padding:8px; }
+
+  .caritas-sidebar {
+    position:fixed;
+    left:0;
+    top:0;
+    bottom:0;
+    z-index:1200;
+    width:0 !important;
+    flex-basis:0 !important;
+    overflow:hidden;
+    box-shadow:none;
+    transition:width .22s ease;
+  }
+  .caritas-sidebar:not(.collapsed) {
+    width:min(285px, 86vw) !important;
+    flex-basis:min(285px, 86vw) !important;
+    box-shadow:6px 0 24px rgba(0,0,0,.22);
+  }
+  .caritas-sidebar.collapsed .sidebar-logo { width:58px; height:46px; }
+  .caritas-sidebar:not(.collapsed) .sidebar-brand { padding:0 52px; }
+  .caritas-sidebar:not(.collapsed) .sidebar-item > span:not(.sidebar-icon) { display:block; }
+  .caritas-sidebar:not(.collapsed) .sidebar-user,
+  .caritas-sidebar:not(.collapsed) .sidebar-section { display:block; }
+  .sidebar-backdrop {
+    display:block;
+    position:fixed;
+    inset:0;
+    z-index:1100;
+    border:0;
+    background:rgba(0,0,0,.42);
+    padding:0;
+    cursor:pointer;
+  }
+
+  .page-card { border-radius:8px; }
+  .page-heading { padding:14px; gap:12px; }
+  .page-heading h1 { font-size:18px; }
+  .page-heading .btn { width:auto; min-height:40px; }
+  .stats-grid { grid-template-columns:1fr 1fr; gap:8px; padding:12px; }
+  .stat-card { min-height:78px; padding:12px; }
+  .stat-card strong { font-size:21px; }
+  .table-toolbar { padding:14px 12px 10px; }
+  .admin-table { min-width:720px; }
+  .table-wrap { border-radius:0 0 8px 8px; }
+  .module-tabs { overflow-x:auto; -webkit-overflow-scrolling:touch; }
+  .form-grid { grid-template-columns:1fr; }
+  .form-actions { flex-wrap:wrap; }
+  .form-actions .btn { min-height:40px; flex:1 1 140px; }
+  .search-input { width:100%; min-height:40px; }
+}
+
+@media (max-width:380px) {
+  .stats-grid { grid-template-columns:1fr 1fr; }
+  .stat-card span { font-size:11px; }
+  .stat-card strong { font-size:19px; }
+  .topbar { padding:0 8px; }
+  .notification-btn { font-size:17px; }
+}
