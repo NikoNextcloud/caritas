@@ -236,3 +236,36 @@ button, input, select, textarea { font: inherit; }
   .topbar { padding:0 8px; }
   .notification-btn { font-size:17px; }
 }
+
+
+/* Unified responsive controls and logo */
+.topbar-left { gap:12px; }
+.topbar-logo { width:44px; height:44px; object-fit:contain; display:block; }
+.page-heading .btn,
+.form-actions .btn { min-height:38px; white-space:nowrap; }
+.form-actions { grid-column:1/-1; display:flex; align-items:center; justify-content:flex-end; gap:8px; }
+.table-actions { display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+.table-action { min-height:30px; white-space:nowrap; }
+.module-tabs button { min-height:44px; }
+.btn:focus-visible, .table-action:focus-visible, .module-tabs button:focus-visible,
+.search-input:focus-visible, .form-grid input:focus-visible, .form-grid select:focus-visible,
+.form-grid textarea:focus-visible { outline:2px solid rgba(51,122,183,.35); outline-offset:1px; }
+
+@media (max-width:600px) {
+  .topbar-left { gap:8px; }
+  .topbar-logo { width:40px; height:40px; }
+  .page-heading { align-items:center; }
+  .page-heading > div:first-child { min-width:0; flex:1; }
+  .page-heading .btn { flex:0 0 auto; min-height:40px; }
+  .form-actions { grid-column:1/-1; justify-content:stretch; }
+  .form-actions .btn { flex:1 1 0; }
+  .table-toolbar { align-items:stretch; }
+  .table-toolbar h2 { display:flex; align-items:center; min-height:40px; }
+  .table-actions { flex-direction:column; align-items:stretch; }
+  .table-action { width:100%; min-width:96px; }
+}
+
+@media (max-width:380px) {
+  .topbar-logo { width:36px; height:36px; }
+  .page-heading .btn { padding:8px 10px; }
+}
