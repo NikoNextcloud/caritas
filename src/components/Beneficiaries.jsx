@@ -29,7 +29,7 @@ function nextId(items){const ids=Object.values(items).map(x=>Number(x.id)).filte
 export default function Beneficiaries({ user }) {
  const [items,setItems]=useState({}),[loading,setLoading]=useState(true),[saving,setSaving]=useState(false);
  const [search,setSearch]=useState(''),[view,setView]=useState('list'),[editing,setEditing]=useState(null),[selected,setSelected]=useState(null);
- const [form,setForm]=useState(emptyForm);
+ const [form,setForm]=useState(emptyForm),[photoInputKey,setPhotoInputKey]=useState(0);
 
  const load=async()=>{try{setLoading(true);const s=await get(ref(database,'beneficiaries'));setItems(s.exists()?s.val():{})}catch(e){alert('Грешка при зареждане: '+e.message)}finally{setLoading(false)}};
  useEffect(()=>{load()},[]);
@@ -37,11 +37,11 @@ export default function Beneficiaries({ user }) {
  const filtered=list.filter(x=>[x.id,x.firstName,x.middleName,x.lastName,x.identifier].filter(Boolean).join(' ').toLowerCase().includes(search.toLowerCase()));
 
  const change=e=>setForm(f=>({...f,[e.target.name]:e.target.value}));
- const reset=()=>{setForm(emptyForm);setEditing(null)};
+ const reset=()=>{setForm(emptyForm);setEditing(null);setPhotoInputKey(k=>k+1)};
  const add=()=>{reset();setView('add')};
- const edit=x=>{setEditing(x.firebaseKey);setForm({firstName:x.firstName||'',middleName:x.middleName||'',lastName:x.lastName||'',gender:x.gender||'',birthDate:x.birthDate||'',identifier:x.identifier||'',status:x.status||'active',photo:x.photo||''});setView('add');window.scrollTo({top:0,behavior:'smooth'})};
+ const edit=x=>{setEditing(x.firebaseKey);setPhotoInputKey(k=>k+1);setForm({firstName:x.firstName||'',middleName:x.middleName||'',lastName:x.lastName||'',gender:x.gender||'',birthDate:x.birthDate||'',identifier:x.identifier||'',status:x.status||'active',photo:x.photo||''});setView('add');window.scrollTo({top:0,behavior:'smooth'})};
  const photo=async e=>{const f=e.target.files?.[0];if(!f)return;if(!f.type.startsWith('image/'))return alert('Моля, избери изображение.');try{setSaving(true);const compressed=await compressImage(f);setForm(x=>({...x,photo:compressed}))}catch(err){alert('Грешка при снимката: '+err.message)}finally{setSaving(false)}};
- const save=async e=>{e.preventDefault();if(!form.firstName.trim()||!form.lastName.trim())return alert('Собствено име и фамилия са задължителни.');try{setSaving(true);const id=editing?items[editing]?.id:nextId(items);const data={id:Number(id),firstName:form.firstName.trim(),middleName:form.middleName.trim(),lastName:form.lastName.trim(),gender:form.gender,birthDate:form.birthDate,identifier:form.identifier.trim(),status:form.status,active:form.status==='active',archived:form.status==='archived',photo:form.photo||'',updatedBy:user?.uid||'unknown',updatedAt:Date.now()};
+ const save=async e=>{e.preventDefault();if(!form.firstName.trim()||!form.lastName.trim())return alert('Собствено име и фамилия са задължителни.');if(form.identifier.trim().length>100)return alert('Идентификаторът е прекалено дълъг.');try{setSaving(true);const id=editing?items[editing]?.id:nextId(items);const data={id:Number(id),firstName:form.firstName.trim(),middleName:form.middleName.trim(),lastName:form.lastName.trim(),gender:form.gender,birthDate:form.birthDate,identifier:form.identifier.trim(),status:form.status,active:form.status==='active',archived:form.status==='archived',photo:form.photo||'',updatedBy:user?.uid||'unknown',updatedAt:Date.now()};
  if(editing){await update(ref(database,'beneficiaries/'+editing),data);setItems(p=>({...p,[editing]:{...p[editing],...data}}))}
  else {const r=push(ref(database,'beneficiaries'));const x={...data,createdBy:user?.uid||'unknown',createdAt:Date.now()};await update(r,x);setItems(p=>({...p,[r.key]:x}))}
  reset();setView('list');
@@ -61,7 +61,7 @@ export default function Beneficiaries({ user }) {
       <label>Дата на раждане<input type="date" name="birthDate" value={form.birthDate} onChange={change}/></label>
       <label>Идентификатор<input name="identifier" value={form.identifier} onChange={change}/></label>
       <label>Статус<select name="status" value={form.status} onChange={change}><option value="active">Активен</option><option value="archived">Архивиран</option></select></label>
-      <label>Снимка<input type="file" accept="image/*" onChange={photo}/></label>
+      <label>Снимка<input key={photoInputKey} type="file" accept="image/*" onChange={photo}/>{form.photo&&<button type="button" className="table-action danger photo-remove" onClick={()=>setForm(x=>({...x,photo:""}))}>Премахни снимката</button>}</label>
       <div className="form-actions"><button className="btn btn-primary" disabled={saving}>{saving?'Записване...':editing?'Запази промените':'Запази'}</button><button type="button" className="btn btn-light" onClick={()=>{reset();setView('list')}}>Отказ</button></div>
     </form>
     {form.photo&&<img className="beneficiary-preview" src={form.photo} onClick={()=>setSelected(form.photo)} alt="Преглед"/>}
