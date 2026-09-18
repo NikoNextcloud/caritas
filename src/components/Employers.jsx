@@ -254,8 +254,8 @@ export default function Employers() {
                   <td>{employer.phone || '—'}</td>
                   <td>{employer.email || '—'}</td>
                   <td>
-                    <span className="status-badge">
-                      {employer.status === 'archived' ? 'Архивиран' : 'Активен'}
+                    <span className={`status-badge ${employer.status === 'archived' ? 'status-inactive' : 'status-active'}`}>
+                      {employer.status === 'archived' ? 'Неактивен' : 'Активен'}
                     </span>
                   </td>
                   <td>
