@@ -268,7 +268,7 @@ export default function Users() {
                       {user.role === 'admin' ? 'Администратор' : 'Потребител'}
                     </span>
                   </td>
-                  <td>{user.active === false ? 'Неактивен' : 'Активен'}</td>
+                  <td><span className={`status-badge ${user.active === false ? 'status-inactive' : 'status-active'}`}>{user.active === false ? 'Неактивен' : 'Активен'}</span></td>
                   <td className="uid-cell">{user.uid}</td>
                   <td>
                     <button className="table-action edit-action" onClick={() => edit(user.uid, user)}>
