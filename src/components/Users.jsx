@@ -97,6 +97,7 @@ export default function Users() {
       }
 
       resetForm();
+      setView('list');
     } catch (error) {
       alert('Грешка при записване: ' + error.message);
     }
@@ -223,7 +224,7 @@ export default function Users() {
           <div className="form-actions">
             <button className="btn btn-primary" type="submit">Запази</button>
             {editing && (
-              <button type="button" className="btn btn-light" onClick={resetForm}>Отказ</button>
+              <button type="button" className="btn btn-light" onClick={() => { resetForm(); setView('list'); }}>Отказ</button>
             )}
           </div>
         </form>
