@@ -91,6 +91,7 @@ export default function Employers() {
       }
 
       reset();
+      setView('list');
     } catch (error) {
       alert('Грешка при записване: ' + error.message);
     } finally {
@@ -213,7 +214,7 @@ export default function Employers() {
               {saving ? 'Записване...' : editing ? 'Запази промените' : 'Запази'}
             </button>
             {editing && (
-              <button type="button" className="btn btn-light" onClick={reset}>Отказ</button>
+              <button type="button" className="btn btn-light" onClick={() => { reset(); setView('list'); }}>Отказ</button>
             )}
           </div>
         </form>
