@@ -8,6 +8,7 @@ import Employers from './Employers';
 import Tasks from './Tasks';
 import Users from './Users';
 import Export from './Export';
+import Settings from './Settings';
 
 const statusLabels = { new: 'Нова', 'in-progress': 'В процес', done: 'Приключена', cancelled: 'Отказана' };
 
@@ -154,7 +155,7 @@ export default function Dashboard() {
     if (activeTab === 'employers') return <Employers />;
     if (activeTab === 'export') return <Export />;
     if (activeTab === 'users') return <Users />;
-    if (activeTab === 'settings') return renderSimple('Настройки', 'Настройки на системата.');
+    if (activeTab === 'settings') return <Settings />;
     return renderDashboard();
   };
 
