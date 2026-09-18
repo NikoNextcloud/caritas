@@ -1,14 +1,16 @@
 import { useEffect, useState } from 'react';
 import { get, push, ref, remove, update } from 'firebase/database';
 import { database } from '../firebase';
+import { useAuth } from '../contexts/AuthContext';
 
 const empty={title:'',description:'',status:'new',dueDate:''};
 export default function Tasks(){
+ const { currentUser, isAdmin } = useAuth();
  const [items,setItems]=useState({}),[form,setForm]=useState(empty),[editing,setEditing]=useState(null),[loading,setLoading]=useState(true);
  async function load(){try{const s=await get(ref(database,'requests'));setItems(s.exists()?s.val():{})}catch(e){alert('Грешка при зареждане: '+e.message)}finally{setLoading(false)}}
  useEffect(()=>{load()},[]);
- const save=async e=>{e.preventDefault();if(!form.title.trim())return alert('Въведи задача.');try{const data={...form,title:form.title.trim(),updatedAt:Date.now()};if(editing){await update(ref(database,'requests/'+editing),data);setItems(p=>({...p,[editing]:{...p[editing],...data}}))}else{const r=push(ref(database,'requests'));const x={...data,createdAt:Date.now()};await update(r,x);setItems(p=>({...p,[r.key]:x}))}setForm(empty);setEditing(null)}catch(e){alert('Грешка при записване: '+e.message)}};
- const del=async id=>{if(!confirm('Изтрий задачата?'))return;await remove(ref(database,'requests/'+id));setItems(p=>{const n={...p};delete n[id];return n})};
+ const save=async e=>{e.preventDefault();if(!form.title.trim())return alert('Въведи задача.');try{const data={...form,title:form.title.trim(),updatedAt:Date.now()};if(editing){await update(ref(database,'requests/'+editing),data);setItems(p=>({...p,[editing]:{...p[editing],...data}}))}else{const r=push(ref(database,'requests'));const x={...data,createdBy:currentUser?.uid||'',createdAt:Date.now()};await update(r,x);setItems(p=>({...p,[r.key]:x}))}setForm(empty);setEditing(null)}catch(e){alert('Грешка при записване: '+e.message)}};
+ const del=async id=>{if(!isAdmin && items[id]?.createdBy!==currentUser?.uid)return alert('Нямаш права да изтриеш тази задача.');if(!confirm('Изтрий задачата?'))return;await remove(ref(database,'requests/'+id));setItems(p=>{const n={...p};delete n[id];return n})};
  const list=Object.entries(items).map(([id,x])=>({id,...x}));
  return <section className="page-card"><div className="page-heading"><div><h1>Списък Задачи</h1><div className="breadcrumb">Начало / Списък Задачи / Листване</div></div><button className="btn btn-primary" onClick={()=>{setEditing(null);setForm(empty)}}>+ Добави</button></div>
  <div className="module-form"><h2>{editing?'Редактиране на задача':'Нова задача'}</h2><form onSubmit={save} className="form-grid"><label>Задача<input name="title" value={form.title} onChange={e=>setForm({...form,title:e.target.value})}/></label><label>Срок<input type="date" name="dueDate" value={form.dueDate} onChange={e=>setForm({...form,dueDate:e.target.value})}/></label><label>Статус<select name="status" value={form.status} onChange={e=>setForm({...form,status:e.target.value})}><option value="new">Нова</option><option value="in-progress">В процес</option><option value="done">Приключена</option></select></label><label>Описание<textarea name="description" value={form.description} onChange={e=>setForm({...form,description:e.target.value})}/></label><div className="form-actions"><button className="btn btn-primary">Запази</button>{editing&&<button type="button" className="btn btn-light" onClick={()=>{setEditing(null);setForm(empty)}}>Отказ</button>}</div></form></div>
