@@ -21,6 +21,7 @@ export default function Employers() {
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [view, setView] = useState('list');
 
   async function load() {
     setLoading(true);
@@ -46,6 +47,11 @@ export default function Employers() {
   const reset = () => {
     setForm(empty);
     setEditing(null);
+  };
+
+  const add = () => {
+    reset();
+    setView('add');
   };
 
   const save = async (event) => {
@@ -103,6 +109,7 @@ export default function Employers() {
       notes: employer.notes || '',
       status: employer.status === 'archived' ? 'archived' : 'active',
     });
+    setView('add');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -152,15 +159,15 @@ export default function Employers() {
           <h1>Работодатели</h1>
           <div className="breadcrumb">Начало / Работодатели / Листване</div>
         </div>
-        <button className="btn btn-primary" onClick={reset}>+ Добави</button>
+        <button className="btn btn-primary" onClick={add}>+ Добави</button>
       </div>
 
       <div className="module-tabs">
-        <button className={!editing ? 'active' : ''} onClick={reset}>Листване</button>
-        <button className={editing ? 'active' : ''} onClick={reset}>Добави</button>
+        <button className={view === 'list' ? 'active' : ''} onClick={() => { reset(); setView('list'); }}>Листване</button>
+        <button className={view === 'add' ? 'active' : ''} onClick={add}>{editing ? 'Редактиране' : 'Добави'}</button>
       </div>
 
-      <div className="module-form">
+      {view === 'add' && <div className="module-form">
         <h2>{editing ? 'Редактиране на работодател' : 'Нов работодател'}</h2>
         <form onSubmit={save} className="form-grid">
           <label>
@@ -210,8 +217,9 @@ export default function Employers() {
             )}
           </div>
         </form>
-      </div>
+      </div>}
 
+      {view === 'list' && <>
       <div className="table-toolbar">
         <h2>Листване</h2>
         <input
@@ -269,6 +277,7 @@ export default function Employers() {
       <div className="pagination">
         <span>Брой записи: {list.length}</span>
       </div>
+      </>}
     </section>
   );
 }
