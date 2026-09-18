@@ -1,10 +1,7 @@
-import { useEffect, useMemo, useState } from 'react';
-import { database } from '../firebase';
+import React, { useEffect, useState } from 'react';
 import { get, push, ref, remove, update } from 'firebase/database';
-import { useAuth } from '../contexts/AuthContext';
+import { database } from '../firebase';
 
-const emptyForm = { photo: '', firstName: '', middleName: '', lastName: '', gender: '', birthDate: '', identifier: '', status: '', active: true, archived: false };
-const inputStyle = { width: '100%', boxSizing: 'border-box', padding: '9px', marginTop: '5px', border: '1px solid #ccc', borderRadius: '5px' };
 const MAX_PHOTO_BYTES = 300 * 1024;
 const MAX_PHOTO_DIMENSION = 500;
 
@@ -15,32 +12,77 @@ function compressImage(file) {
 
     image.onload = () => {
       try {
-        const scale = Math.min(1, MAX_PHOTO_DIMENSION / Math.max(image.naturalWidth, image.naturalHeight));
-        const width = Math.max(1, Math.round(image.naturalWidth * scale));
-        const height = Math.max(1, Math.round(image.naturalHeight * scale));
+        const maxSide = Math.max(
+          image.naturalWidth,
+          image.naturalHeight
+        );
+
+        const scale = Math.min(
+          1,
+          MAX_PHOTO_DIMENSION / maxSide
+        );
+
+        const width = Math.max(
+          1,
+          Math.round(image.naturalWidth * scale)
+        );
+
+        const height = Math.max(
+          1,
+          Math.round(image.naturalHeight * scale)
+        );
+
         const canvas = document.createElement('canvas');
         canvas.width = width;
         canvas.height = height;
+
         const ctx = canvas.getContext('2d');
-        if (!ctx) throw new Error('Браузърът не поддържа обработка на изображения.');
-        ctx.drawImage(image, 0, 0, width, height);
+
+        if (!ctx) {
+          throw new Error(
+            'Браузърът не поддържа обработка на изображения.'
+          );
+        }
+
+        // Бял фон, за да няма черен фон при PNG снимки
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, width, height);
+
+        ctx.drawImage(
+          image,
+          0,
+          0,
+          width,
+          height
+        );
 
         let quality = 0.75;
-        const makeDataUrl = () => canvas.toDataURL('image/jpeg', quality);
+
+        const makeDataUrl = () =>
+          canvas.toDataURL(
+            'image/jpeg',
+            quality
+          );
+
         let dataUrl = makeDataUrl();
 
-        while (dataUrl.length * 0.75 > MAX_PHOTO_BYTES && quality > 0.35) {
+        while (
+          dataUrl.length * 0.75 > MAX_PHOTO_BYTES &&
+          quality > 0.35
+        ) {
           quality -= 0.05;
           dataUrl = makeDataUrl();
         }
 
         if (dataUrl.length * 0.75 > MAX_PHOTO_BYTES) {
-          throw new Error('Снимката остава прекалено голяма след компресиране.');
+          throw new Error(
+            'Снимката остава прекалено голяма след компресиране.'
+          );
         }
 
         resolve(dataUrl);
-      } catch (err) {
-        reject(err);
+      } catch (error) {
+        reject(error);
       } finally {
         URL.revokeObjectURL(objectUrl);
       }
@@ -48,136 +90,994 @@ function compressImage(file) {
 
     image.onerror = () => {
       URL.revokeObjectURL(objectUrl);
-      reject(new Error('Изображението не може да бъде обработено. Избери JPG или PNG снимка.'));
+      reject(
+        new Error('Снимката не може да бъде обработена.')
+      );
     };
 
     image.src = objectUrl;
   });
 }
 
-export default function Beneficiaries() {
-  const { currentUser } = useAuth();
-  const [beneficiaries, setBeneficiaries] = useState([]);
-  const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState(emptyForm);
-  const [editingId, setEditingId] = useState(null);
-  const [search, setSearch] = useState('');
+function getNextNumericId(beneficiaries) {
+  const ids = Object.values(beneficiaries)
+    .map((beneficiary) => Number(beneficiary.id))
+    .filter(
+      (id) => Number.isInteger(id) && id > 0
+    );
+
+  if (ids.length === 0) {
+    return 1;
+  }
+
+  return Math.max(...ids) + 1;
+}
+
+export default function Beneficiaries({ user }) {
+  const [beneficiaries, setBeneficiaries] = useState({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [uploading, setUploading] = useState(false);
-  const [error, setError] = useState('');
+  const [search, setSearch] = useState('');
+  const [editingId, setEditingId] = useState(null);
 
-  const loadBeneficiaries = async () => {
-    if (!currentUser) return;
+  const [selectedPhoto, setSelectedPhoto] = useState(null);
+
+  const [form, setForm] = useState({
+    firstName: '',
+    middleName: '',
+    lastName: '',
+    gender: '',
+    birthDate: '',
+    identifier: '',
+    status: 'active',
+    photo: ''
+  });
+
+  useEffect(() => {
+    loadBeneficiaries();
+  }, []);
+
+  async function loadBeneficiaries() {
     try {
-      setLoading(true); setError('');
-      const snapshot = await get(ref(database, 'beneficiaries'));
-      if (!snapshot.exists()) { setBeneficiaries([]); return; }
-      setBeneficiaries(Object.entries(snapshot.val()).map(([id, value]) => ({ id, ...value })));
-    } catch (err) { console.error(err); setError(`Бенефициентите не могат да бъдат заредени: ${err.code || err.message}`); }
-    finally { setLoading(false); }
-  };
+      setLoading(true);
 
-  useEffect(() => { loadBeneficiaries(); }, [currentUser]);
+      const snapshot = await get(
+        ref(database, 'beneficiaries')
+      );
 
-  const filteredBeneficiaries = useMemo(() => {
-    const term = search.trim().toLocaleLowerCase('bg-BG');
-    if (!term) return beneficiaries;
-    return beneficiaries.filter(b => [b.firstName, b.middleName, b.lastName, b.identifier].some(value => String(value || '').toLocaleLowerCase('bg-BG').includes(term)));
-  }, [beneficiaries, search]);
+      if (snapshot.exists()) {
+        setBeneficiaries(snapshot.val());
+      } else {
+        setBeneficiaries({});
+      }
+    } catch (error) {
+      console.error(error);
 
-  const handleChange = e => {
-    const { name, value, type, checked } = e.target;
-    setForm(prev => ({ ...prev, [name]: type === 'checkbox' ? checked : value }));
-  };
-
-  const handlePhoto = async e => {
-    const file = e.target.files?.[0];
-    if (!file || !currentUser) return;
-    if (!file.type.startsWith('image/')) { setError('Моля, избери изображение.'); return; }
-    try {
-      setUploading(true); setError('');
-      const compressedPhoto = await compressImage(file);
-      setForm(prev => ({ ...prev, photo: compressedPhoto }));
-    } catch (err) {
-      console.error(err);
-      setError(`Снимката не може да бъде обработена: ${err.message}`);
+      alert(
+        `Грешка при зареждане на бенефициентите:\n${error.message}`
+      );
     } finally {
-      setUploading(false);
-      e.target.value = '';
+      setLoading(false);
     }
-  };
+  }
 
-  const openAdd = () => { setEditingId(null); setForm(emptyForm); setError(''); setShowForm(true); };
-  const openEdit = b => { setEditingId(b.id); setForm({ ...emptyForm, ...b }); setError(''); setShowForm(true); };
+  function handleChange(event) {
+    const { name, value } = event.target;
 
-  const handleSubmit = async e => {
-    e.preventDefault();
-    if (!currentUser) return;
-    if (!form.firstName.trim() || !form.lastName.trim()) { setError('Името и фамилията са задължителни.'); return; }
+    setForm((previous) => ({
+      ...previous,
+      [name]: value
+    }));
+  }
+
+  async function handlePhotoChange(event) {
+    const file = event.target.files?.[0];
+
+    if (!file) {
+      return;
+    }
+
+    if (!file.type.startsWith('image/')) {
+      alert('Моля, избери изображение.');
+      return;
+    }
+
     try {
-      setSaving(true); setError('');
-      let beneficiaryId = editingId;
-      if (!beneficiaryId) beneficiaryId = push(ref(database, 'beneficiaries')).key;
-      const data = {
-        id: beneficiaryId,
-        photo: form.photo || '', firstName: form.firstName.trim(), middleName: form.middleName.trim(), lastName: form.lastName.trim(),
-        gender: form.gender, birthDate: form.birthDate, identifier: form.identifier.trim(), status: form.status.trim(),
-        active: !!form.active, archived: !!form.archived, updatedBy: currentUser.uid, updatedAt: new Date().toISOString()
+      setSaving(true);
+
+      const compressedImage =
+        await compressImage(file);
+
+      setForm((previous) => ({
+        ...previous,
+        photo: compressedImage
+      }));
+    } catch (error) {
+      console.error(error);
+
+      alert(
+        `Грешка при обработка на снимката:\n${error.message}`
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function resetForm() {
+    setEditingId(null);
+
+    setForm({
+      firstName: '',
+      middleName: '',
+      lastName: '',
+      gender: '',
+      birthDate: '',
+      identifier: '',
+      status: 'active',
+      photo: ''
+    });
+  }
+
+  function handleEdit(beneficiary) {
+    setEditingId(beneficiary.firebaseKey);
+
+    setForm({
+      firstName: beneficiary.firstName || '',
+      middleName: beneficiary.middleName || '',
+      lastName: beneficiary.lastName || '',
+      gender: beneficiary.gender || '',
+      birthDate: beneficiary.birthDate || '',
+      identifier: beneficiary.identifier || '',
+      status: beneficiary.status || 'active',
+      photo: beneficiary.photo || ''
+    });
+
+    window.scrollTo({
+      top: 0,
+      behavior: 'smooth'
+    });
+  }
+
+  async function handleDelete(beneficiary) {
+    const fullName = [
+      beneficiary.firstName,
+      beneficiary.middleName,
+      beneficiary.lastName
+    ]
+      .filter(Boolean)
+      .join(' ');
+
+    const confirmed = window.confirm(
+      `Сигурен ли си, че искаш да изтриеш бенефициент №${beneficiary.id}${
+        fullName ? ` - ${fullName}` : ''
+      }?`
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      setSaving(true);
+
+      await remove(
+        ref(
+          database,
+          `beneficiaries/${beneficiary.firebaseKey}`
+        )
+      );
+
+      setBeneficiaries((previous) => {
+        const copy = { ...previous };
+
+        delete copy[beneficiary.firebaseKey];
+
+        return copy;
+      });
+
+      if (
+        editingId === beneficiary.firebaseKey
+      ) {
+        resetForm();
+      }
+    } catch (error) {
+      console.error(error);
+
+      alert(
+        `Грешка при изтриване:\n${error.code || ''}\n${error.message}`
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleSubmit(event) {
+    event.preventDefault();
+
+    if (!form.firstName.trim()) {
+      alert('Моля, въведи собствено име.');
+      return;
+    }
+
+    if (!form.lastName.trim()) {
+      alert('Моля, въведи фамилия.');
+      return;
+    }
+
+    try {
+      setSaving(true);
+
+      let beneficiaryId = editingId
+        ? beneficiaries[editingId]?.id
+        : null;
+
+      // При нов бенефициент генерираме числово ID
+      if (!beneficiaryId) {
+        beneficiaryId =
+          getNextNumericId(beneficiaries);
+      }
+
+      const beneficiaryData = {
+        id: Number(beneficiaryId),
+
+        firstName: form.firstName.trim(),
+        middleName: form.middleName.trim(),
+        lastName: form.lastName.trim(),
+
+        gender: form.gender,
+        birthDate: form.birthDate,
+        identifier: form.identifier.trim(),
+
+        status: form.status,
+        active: form.status === 'active',
+        archived: form.status === 'archived',
+
+        photo: form.photo || '',
+
+        updatedBy:
+          user?.uid || 'unknown',
+
+        updatedAt: Date.now()
       };
-      if (editingId) await update(ref(database, `beneficiaries/${editingId}`), data);
-      else await update(ref(database, `beneficiaries/${beneficiaryId}`), { ...data, createdBy: currentUser.uid, createdAt: new Date().toISOString() });
-      setForm(emptyForm); setEditingId(null); setShowForm(false); await loadBeneficiaries();
-    } catch (err) { console.error(err); setError(`Бенефициентът не може да бъде записан: ${err.code || err.message}`); }
-    finally { setSaving(false); }
-  };
 
-  const handleDelete = async id => {
-    if (!currentUser || !window.confirm('Сигурен ли си, че искаш да изтриеш този бенефициент?')) return;
-    try { await remove(ref(database, `beneficiaries/${id}`)); await loadBeneficiaries(); }
-    catch (err) { console.error(err); setError(`Бенефициентът не може да бъде изтрит: ${err.code || err.message}`); }
-  };
+      if (editingId) {
+        await update(
+          ref(
+            database,
+            `beneficiaries/${editingId}`
+          ),
+          beneficiaryData
+        );
 
-  return <div>
-    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '15px', marginBottom: '20px', flexWrap: 'wrap' }}>
-      <div><h2 style={{ margin: 0 }}>Бенефициенти</h2><p style={{ color: '#777', margin: '6px 0 0' }}>Регистър на бенефициентите</p></div>
-      <button onClick={openAdd} style={{ padding: '10px 18px', background: '#198754', color: 'white', border: 0, borderRadius: 6, cursor: 'pointer', fontWeight: 600 }}>+ Добави</button>
-    </div>
-    <div style={{ background: 'white', padding: '15px 20px', borderRadius: 8, boxShadow: '0 1px 3px rgba(0,0,0,0.1)', marginBottom: 20 }}>
-      <input value={search} onChange={e => setSearch(e.target.value)} placeholder="🔎 Търсене по име, фамилия или ЕГН / ЛНЧ..." style={{ ...inputStyle, marginTop: 0, maxWidth: 600 }} />
-    </div>
-    {error && <div style={{ background: '#fff3cd', color: '#856404', padding: '12px 16px', borderRadius: 6, marginBottom: 20 }}>{error}</div>}
-    {showForm && <form onSubmit={handleSubmit} style={{ background: 'white', padding: 20, borderRadius: 8, boxShadow: '0 1px 3px rgba(0,0,0,0.1)', marginBottom: 20 }}>
-      <h3 style={{ marginTop: 0 }}>{editingId ? 'Редактиране на бенефициент' : 'Нов бенефициент'}</h3>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 14 }}>
-        <label>Снимка<input style={inputStyle} type="file" accept="image/jpeg,image/png,image/webp" onChange={handlePhoto} disabled={uploading} />{uploading && <div style={{ marginTop: 6, color: '#666' }}>Обработване и компресиране...</div>}{form.photo && <img src={form.photo} alt="Преглед" style={{ display: 'block', marginTop: 8, width: 70, height: 70, objectFit: 'cover', borderRadius: 6 }} />}</label>
-        <label>Име<input style={inputStyle} name="firstName" value={form.firstName} onChange={handleChange} required /></label>
-        <label>Презиме<input style={inputStyle} name="middleName" value={form.middleName} onChange={handleChange} /></label>
-        <label>Фамилия<input style={inputStyle} name="lastName" value={form.lastName} onChange={handleChange} required /></label>
-        <label>Пол<select style={inputStyle} name="gender" value={form.gender} onChange={handleChange}><option value="">Избери</option><option value="Мъж">Мъж</option><option value="Жена">Жена</option></select></label>
-        <label>Рождена дата<input style={inputStyle} type="date" name="birthDate" value={form.birthDate} onChange={handleChange} /></label>
-        <label>ЕГН / ЛНЧ<input style={inputStyle} name="identifier" value={form.identifier} onChange={handleChange} /></label>
-        <label>Статут<input style={inputStyle} name="status" value={form.status} onChange={handleChange} /></label>
+        setBeneficiaries((previous) => ({
+          ...previous,
+          [editingId]: {
+            ...previous[editingId],
+            ...beneficiaryData,
+            firebaseKey: editingId
+          }
+        }));
+      } else {
+        // Firebase ключът е вътрешен,
+        // но видимото ID е само числово.
+        const newRef = push(
+          ref(database, 'beneficiaries')
+        );
+
+        const firebaseKey = newRef.key;
+
+        const newBeneficiary = {
+          ...beneficiaryData,
+
+          createdBy:
+            user?.uid || 'unknown',
+
+          createdAt: Date.now(),
+
+          firebaseKey
+        };
+
+        await update(
+          newRef,
+          newBeneficiary
+        );
+
+        setBeneficiaries((previous) => ({
+          ...previous,
+          [firebaseKey]: newBeneficiary
+        }));
+      }
+
+      resetForm();
+    } catch (error) {
+      console.error(error);
+
+      alert(
+        `Грешка при записване:\n${
+          error.code || ''
+        }\n${error.message}`
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function openPhoto(photo) {
+    if (!photo) {
+      return;
+    }
+
+    setSelectedPhoto(photo);
+  }
+
+  function closePhoto() {
+    setSelectedPhoto(null);
+  }
+
+  const beneficiaryList = Object.entries(
+    beneficiaries
+  )
+    .map(([firebaseKey, beneficiary]) => ({
+      ...beneficiary,
+      firebaseKey
+    }))
+    .sort(
+      (a, b) =>
+        Number(a.id || 0) -
+        Number(b.id || 0)
+    );
+
+  const filteredBeneficiaries =
+    beneficiaryList.filter((beneficiary) => {
+      const text = [
+        beneficiary.id,
+        beneficiary.firstName,
+        beneficiary.middleName,
+        beneficiary.lastName,
+        beneficiary.identifier
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase();
+
+      return text.includes(
+        search.toLowerCase()
+      );
+    });
+
+  return (
+    <div
+      style={{
+        padding: '24px',
+        maxWidth: '1400px',
+        margin: '0 auto'
+      }}
+    >
+      <h1 style={{ marginBottom: '24px' }}>
+        Бенефициенти
+      </h1>
+
+      {/* FORM */}
+      <form
+        onSubmit={handleSubmit}
+        style={{
+          background: '#fff',
+          padding: '20px',
+          borderRadius: '12px',
+          marginBottom: '24px',
+          boxShadow:
+            '0 2px 10px rgba(0,0,0,0.08)'
+        }}
+      >
+        <h2>
+          {editingId
+            ? `Редактиране на бенефициент №${
+                beneficiaries[editingId]?.id || ''
+              }`
+            : 'Нов бенефициент'}
+        </h2>
+
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns:
+              'repeat(auto-fit, minmax(200px, 1fr))',
+            gap: '16px',
+            marginTop: '16px'
+          }}
+        >
+          <div>
+            <label>Собствено име *</label>
+
+            <input
+              type="text"
+              name="firstName"
+              value={form.firstName}
+              onChange={handleChange}
+              style={inputStyle}
+              required
+            />
+          </div>
+
+          <div>
+            <label>Бащино име</label>
+
+            <input
+              type="text"
+              name="middleName"
+              value={form.middleName}
+              onChange={handleChange}
+              style={inputStyle}
+            />
+          </div>
+
+          <div>
+            <label>Фамилия *</label>
+
+            <input
+              type="text"
+              name="lastName"
+              value={form.lastName}
+              onChange={handleChange}
+              style={inputStyle}
+              required
+            />
+          </div>
+
+          <div>
+            <label>Пол</label>
+
+            <select
+              name="gender"
+              value={form.gender}
+              onChange={handleChange}
+              style={inputStyle}
+            >
+              <option value="">
+                Избери
+              </option>
+              <option value="male">
+                Мъж
+              </option>
+              <option value="female">
+                Жена
+              </option>
+            </select>
+          </div>
+
+          <div>
+            <label>Дата на раждане</label>
+
+            <input
+              type="date"
+              name="birthDate"
+              value={form.birthDate}
+              onChange={handleChange}
+              style={inputStyle}
+            />
+          </div>
+
+          <div>
+            <label>Идентификатор</label>
+
+            <input
+              type="text"
+              name="identifier"
+              value={form.identifier}
+              onChange={handleChange}
+              style={inputStyle}
+            />
+          </div>
+
+          <div>
+            <label>Статус</label>
+
+            <select
+              name="status"
+              value={form.status}
+              onChange={handleChange}
+              style={inputStyle}
+            >
+              <option value="active">
+                Активен
+              </option>
+
+              <option value="archived">
+                Архивиран
+              </option>
+            </select>
+          </div>
+
+          <div>
+            <label>Снимка</label>
+
+            <input
+              type="file"
+              accept="image/*"
+              onChange={handlePhotoChange}
+              style={{
+                ...inputStyle,
+                padding: '8px'
+              }}
+            />
+          </div>
+        </div>
+
+        {/* PHOTO PREVIEW */}
+        {form.photo && (
+          <div
+            style={{
+              marginTop: '20px'
+            }}
+          >
+            <div
+              style={{
+                fontWeight: '600',
+                marginBottom: '8px'
+              }}
+            >
+              Преглед на снимката:
+            </div>
+
+            <img
+              src={form.photo}
+              alt="Преглед"
+              onClick={() =>
+                openPhoto(form.photo)
+              }
+              style={{
+                width: '120px',
+                height: '120px',
+                objectFit: 'cover',
+                borderRadius: '10px',
+                border:
+                  '2px solid #ddd',
+                cursor: 'pointer'
+              }}
+              title="Кликни за голям размер"
+            />
+          </div>
+        )}
+
+        <div
+          style={{
+            display: 'flex',
+            gap: '10px',
+            marginTop: '20px'
+          }}
+        >
+          <button
+            type="submit"
+            disabled={saving}
+            style={primaryButtonStyle}
+          >
+            {saving
+              ? 'Записване...'
+              : editingId
+              ? 'Запази промените'
+              : 'Добави бенефициент'}
+          </button>
+
+          {editingId && (
+            <button
+              type="button"
+              onClick={resetForm}
+              style={secondaryButtonStyle}
+            >
+              Отказ
+            </button>
+          )}
+        </div>
+      </form>
+
+      {/* SEARCH */}
+      <div
+        style={{
+          background: '#fff',
+          padding: '16px',
+          borderRadius: '12px',
+          marginBottom: '16px',
+          boxShadow:
+            '0 2px 10px rgba(0,0,0,0.06)'
+        }}
+      >
+        <input
+          type="text"
+          placeholder="Търси по ID, име, фамилия или идентификатор..."
+          value={search}
+          onChange={(event) =>
+            setSearch(event.target.value)
+          }
+          style={{
+            ...inputStyle,
+            width: '100%',
+            boxSizing: 'border-box'
+          }}
+        />
       </div>
-      <div style={{ display: 'flex', gap: 25, marginTop: 18 }}>
-        <label><input type="checkbox" name="active" checked={!!form.active} onChange={handleChange} /> Активен</label>
-        <label><input type="checkbox" name="archived" checked={!!form.archived} onChange={handleChange} /> Архивиран</label>
+
+      {/* TABLE */}
+      <div
+        style={{
+          background: '#fff',
+          borderRadius: '12px',
+          overflow: 'auto',
+          boxShadow:
+            '0 2px 10px rgba(0,0,0,0.08)'
+        }}
+      >
+        {loading ? (
+          <div
+            style={{
+              padding: '30px',
+              textAlign: 'center'
+            }}
+          >
+            Зареждане...
+          </div>
+        ) : (
+          <table
+            style={{
+              width: '100%',
+              borderCollapse:
+                'collapse'
+            }}
+          >
+            <thead>
+              <tr
+                style={{
+                  background:
+                    '#f5f5f5'
+                }}
+              >
+                <th style={thStyle}>
+                  ID
+                </th>
+
+                <th style={thStyle}>
+                  Снимка
+                </th>
+
+                <th style={thStyle}>
+                  Име
+                </th>
+
+                <th style={thStyle}>
+                  Пол
+                </th>
+
+                <th style={thStyle}>
+                  Дата на раждане
+                </th>
+
+                <th style={thStyle}>
+                  Идентификатор
+                </th>
+
+                <th style={thStyle}>
+                  Статус
+                </th>
+
+                <th style={thStyle}>
+                  Действия
+                </th>
+              </tr>
+            </thead>
+
+            <tbody>
+              {filteredBeneficiaries.map(
+                (beneficiary) => {
+                  const fullName = [
+                    beneficiary.firstName,
+                    beneficiary.middleName,
+                    beneficiary.lastName
+                  ]
+                    .filter(Boolean)
+                    .join(' ');
+
+                  return (
+                    <tr
+                      key={
+                        beneficiary.firebaseKey
+                      }
+                    >
+                      <td style={tdStyle}>
+                        <strong>
+                          {beneficiary.id}
+                        </strong>
+                      </td>
+
+                      <td style={tdStyle}>
+                        {beneficiary.photo ? (
+                          <img
+                            src={
+                              beneficiary.photo
+                            }
+                            alt={fullName}
+                            onClick={() =>
+                              openPhoto(
+                                beneficiary.photo
+                              )
+                            }
+                            style={{
+                              width: '60px',
+                              height: '60px',
+                              objectFit:
+                                'cover',
+                              borderRadius:
+                                '8px',
+                              cursor:
+                                'pointer',
+                              border:
+                                '2px solid #ddd'
+                            }}
+                            title="Кликни за голям размер"
+                          />
+                        ) : (
+                          <span
+                            style={{
+                              color:
+                                '#999'
+                            }}
+                          >
+                            Няма снимка
+                          </span>
+                        )}
+                      </td>
+
+                      <td style={tdStyle}>
+                        {fullName}
+                      </td>
+
+                      <td style={tdStyle}>
+                        {beneficiary.gender ===
+                        'male'
+                          ? 'Мъж'
+                          : beneficiary.gender ===
+                            'female'
+                          ? 'Жена'
+                          : '-'}
+                      </td>
+
+                      <td style={tdStyle}>
+                        {beneficiary.birthDate ||
+                          '-'}
+                      </td>
+
+                      <td style={tdStyle}>
+                        {beneficiary.identifier ||
+                          '-'}
+                      </td>
+
+                      <td style={tdStyle}>
+                        <span
+                          style={{
+                            display:
+                              'inline-block',
+                            padding:
+                              '5px 10px',
+                            borderRadius:
+                              '20px',
+                            background:
+                              beneficiary.status ===
+                              'archived'
+                                ? '#eee'
+                                : '#e8f5e9',
+                            color:
+                              beneficiary.status ===
+                              'archived'
+                                ? '#666'
+                                : '#2e7d32',
+                            fontSize:
+                              '13px'
+                          }}
+                        >
+                          {beneficiary.status ===
+                          'archived'
+                            ? 'Архивиран'
+                            : 'Активен'}
+                        </span>
+                      </td>
+
+                      <td style={tdStyle}>
+                        <div
+                          style={{
+                            display:
+                              'flex',
+                            gap: '8px',
+                            flexWrap:
+                              'wrap'
+                          }}
+                        >
+                          <button
+                            type="button"
+                            onClick={() =>
+                              handleEdit(
+                                beneficiary
+                              )
+                            }
+                            style={
+                              editButtonStyle
+                            }
+                          >
+                            Редактирай
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() =>
+                              handleDelete(
+                                beneficiary
+                              )
+                            }
+                            disabled={saving}
+                            style={
+                              deleteButtonStyle
+                            }
+                          >
+                            Изтрий
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                }
+              )}
+
+              {filteredBeneficiaries.length ===
+                0 && (
+                <tr>
+                  <td
+                    colSpan="8"
+                    style={{
+                      padding:
+                        '30px',
+                      textAlign:
+                        'center',
+                      color:
+                        '#777'
+                    }}
+                  >
+                    Няма намерени
+                    бенефициенти.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        )}
       </div>
-      <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
-        <button type="submit" disabled={saving || uploading} style={{ padding: '9px 18px', background: '#0d6efd', color: 'white', border: 0, borderRadius: 5, cursor: 'pointer' }}>{saving ? 'Записване...' : 'Запази'}</button>
-        <button type="button" onClick={() => { setShowForm(false); setEditingId(null); }} style={{ padding: '9px 18px', background: '#6c757d', color: 'white', border: 0, borderRadius: 5, cursor: 'pointer' }}>Отказ</button>
-      </div>
-    </form>}
-    <div style={{ background: 'white', padding: 20, borderRadius: 8, boxShadow: '0 1px 3px rgba(0,0,0,0.1)', overflowX: 'auto' }}>
-      {loading ? <p>Зареждане...</p> : <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 1250 }}>
-        <thead><tr style={{ borderBottom: '2px solid #ddd' }}>{['Id','Снимка','Име','Презиме','Фамилия','Пол','Рождена дата','ЕГН / ЛНЧ','Статут','Активен','Архивиран','Действия'].map(c => <th key={c} style={{ padding: 10, textAlign: 'left', whiteSpace: 'nowrap' }}>{c}</th>)}</tr></thead>
-        <tbody>{filteredBeneficiaries.map(b => <tr key={b.id} style={{ borderBottom: '1px solid #eee' }}>
-          <td style={{ padding: 10, fontSize: 12 }}>{b.id}</td><td style={{ padding: 10 }}>{b.photo ? <img src={b.photo} alt="" style={{ width: 42, height: 42, borderRadius: '50%', objectFit: 'cover' }} /> : '—'}</td>
-          <td style={{ padding: 10 }}>{b.firstName || '—'}</td><td style={{ padding: 10 }}>{b.middleName || '—'}</td><td style={{ padding: 10 }}>{b.lastName || '—'}</td><td style={{ padding: 10 }}>{b.gender || '—'}</td><td style={{ padding: 10 }}>{b.birthDate || '—'}</td><td style={{ padding: 10 }}>{b.identifier || '—'}</td><td style={{ padding: 10 }}>{b.status || '—'}</td>
-          <td style={{ padding: 10, textAlign: 'center' }}><input type="checkbox" checked={!!b.active} readOnly /></td><td style={{ padding: 10, textAlign: 'center' }}><input type="checkbox" checked={!!b.archived} readOnly /></td>
-          <td style={{ padding: 10, whiteSpace: 'nowrap' }}><button onClick={() => openEdit(b)} style={{ marginRight: 6, padding: '6px 10px', background: '#0d6efd', color: 'white', border: 0, borderRadius: 4, cursor: 'pointer' }}>Редактирай</button><button onClick={() => handleDelete(b.id)} style={{ padding: '6px 10px', background: '#dc3545', color: 'white', border: 0, borderRadius: 4, cursor: 'pointer' }}>Изтрий</button></td>
-        </tr>)}{filteredBeneficiaries.length === 0 && <tr><td colSpan="12" style={{ padding: 25, textAlign: 'center', color: '#777' }}>{search ? 'Няма намерени бенефициенти.' : 'Няма добавени бенефициенти.'}</td></tr>}</tbody>
-      </table>}
+
+      {/* PHOTO MODAL */}
+      {selectedPhoto && (
+        <div
+          onClick={closePhoto}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background:
+              'rgba(0, 0, 0, 0.85)',
+            display: 'flex',
+            alignItems:
+              'center',
+            justifyContent:
+              'center',
+            zIndex: 9999,
+            padding: '30px',
+            cursor: 'zoom-out'
+          }}
+        >
+          <button
+            type="button"
+            onClick={closePhoto}
+            style={{
+              position:
+                'absolute',
+              top: '20px',
+              right: '25px',
+              width: '45px',
+              height: '45px',
+              border: 'none',
+              borderRadius:
+                '50%',
+              background:
+                'rgba(255,255,255,0.9)',
+              color: '#222',
+              fontSize:
+                '30px',
+              lineHeight: '1',
+              cursor: 'pointer',
+              zIndex: 10000
+            }}
+            aria-label="Затвори"
+          >
+            ×
+          </button>
+
+          <img
+            src={selectedPhoto}
+            alt="Снимка на бенефициента"
+            onClick={(event) =>
+              event.stopPropagation()
+            }
+            style={{
+              maxWidth: '90vw',
+              maxHeight: '90vh',
+              objectFit:
+                'contain',
+              borderRadius:
+                '10px',
+              boxShadow:
+                '0 10px 40px rgba(0,0,0,0.5)',
+              cursor: 'default'
+            }}
+          />
+        </div>
+      )}
     </div>
-  </div>;
+  );
 }
+
+const inputStyle = {
+  width: '100%',
+  marginTop: '6px',
+  padding: '10px 12px',
+  border: '1px solid #ccc',
+  borderRadius: '8px',
+  fontSize: '14px',
+  boxSizing: 'border-box'
+};
+
+const thStyle = {
+  padding: '12px',
+  textAlign: 'left',
+  borderBottom:
+    '1px solid #ddd',
+  whiteSpace: 'nowrap'
+};
+
+const tdStyle = {
+  padding: '12px',
+  borderBottom:
+    '1px solid #eee',
+  verticalAlign: 'middle'
+};
+
+const primaryButtonStyle = {
+  border: 'none',
+  borderRadius: '8px',
+  padding: '10px 16px',
+  background: '#1976d2',
+  color: '#fff',
+  cursor: 'pointer',
+  fontWeight: '600'
+};
+
+const secondaryButtonStyle = {
+  border: '1px solid #ccc',
+  borderRadius: '8px',
+  padding: '10px 16px',
+  background: '#fff',
+  color: '#333',
+  cursor: 'pointer'
+};
+
+const editButtonStyle = {
+  border: 'none',
+  borderRadius: '6px',
+  padding: '7px 10px',
+  background: '#1976d2',
+  color: '#fff',
+  cursor: 'pointer',
+  fontSize: '13px'
+};
+
+const deleteButtonStyle = {
+  border: 'none',
+  borderRadius: '6px',
+  padding: '7px 10px',
+  background: '#d32f2f',
+  color: '#fff',
+  cursor: 'pointer',
+  fontSize: '13px'
+};
