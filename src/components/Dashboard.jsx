@@ -11,11 +11,13 @@ import Export from './Export';
 
 const statusLabels = { new: 'Нова', 'in-progress': 'В процес', done: 'Приключена', cancelled: 'Отказана' };
 
-function Header({ onLogout, currentUser }) {
+function Header({ onLogout, currentUser, onMenuToggle }) {
   const displayName = currentUser?.displayName || currentUser?.email || 'Потребител';
   return (
     <header className="topbar">
-      <div className="topbar-title">Caritas Administration</div>
+      <div className="topbar-left">
+        <button className="mobile-menu-btn" onClick={onMenuToggle} aria-label="Отвори меню">☰</button>
+      </div>
       <div className="topbar-actions">
         <button className="notification-btn" title="Известия">♧<span className="notification-badge">0</span></button>
         <div className="topbar-user"><span className="avatar">{displayName.charAt(0).toUpperCase()}</span><span>{displayName}</span></div>
@@ -32,11 +34,18 @@ function TablePage({ title, children, actions }) {
 export default function Dashboard() {
   const { currentUser, isAdmin, logout } = useAuth();
   const [activeTab, setActiveTab] = useState('dashboard');
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsed, setCollapsed] = useState(() => typeof window !== 'undefined' && window.innerWidth <= 600);
   const [requests, setRequests] = useState([]);
   const [stats, setStats] = useState({ beneficiaries: 0, employers: 0, users: 0 });
   const [error, setError] = useState('');
   const [loadingStats, setLoadingStats] = useState(true);
+
+  const toggleMenu = () => setCollapsed(v => !v);
+
+  const handleTabChange = (tab) => {
+    setActiveTab(tab);
+    if (typeof window !== 'undefined' && window.innerWidth <= 600) setCollapsed(true);
+  };
 
   const loadDashboard = useCallback(async () => {
     if (!currentUser) return;
@@ -44,16 +53,18 @@ export default function Dashboard() {
       setError('');
       setLoadingStats(true);
 
-      const [beneficiariesSnap, employersSnap, usersSnap] = await Promise.all([
+      const reads = [
         get(ref(database, 'beneficiaries')),
         get(ref(database, 'employers')),
-        get(ref(database, 'users')),
-      ]);
+        isAdmin ? get(ref(database, 'users')) : Promise.resolve(null),
+      ];
+
+      const [beneficiariesSnap, employersSnap, usersSnap] = await Promise.all(reads);
 
       setStats({
         beneficiaries: beneficiariesSnap.exists() ? Object.keys(beneficiariesSnap.val()).length : 0,
         employers: employersSnap.exists() ? Object.keys(employersSnap.val()).length : 0,
-        users: usersSnap.exists() ? Object.keys(usersSnap.val()).length : 0,
+        users: usersSnap?.exists() ? Object.keys(usersSnap.val()).length : 0,
       });
 
       let list = [];
@@ -109,7 +120,7 @@ export default function Dashboard() {
         <div className="stat-card"><span>Заявки</span><strong>{loadingStats ? '...' : requests.length}</strong></div>
         <div className="stat-card"><span>Бенефициенти</span><strong>{loadingStats ? '...' : stats.beneficiaries}</strong></div>
         <div className="stat-card"><span>Работодатели</span><strong>{loadingStats ? '...' : stats.employers}</strong></div>
-        <div className="stat-card"><span>Потребители</span><strong>{loadingStats ? '...' : stats.users}</strong></div>
+        {isAdmin && <div className="stat-card"><span>Потребители</span><strong>{loadingStats ? '...' : stats.users}</strong></div>}
       </div>
       <div className="table-toolbar"><h2>Последни задачи</h2><button className="btn btn-light" onClick={openTasks}>Виж всички</button></div>
       <div className="table-wrap">
@@ -140,11 +151,20 @@ export default function Dashboard() {
     if (activeTab === 'beneficiaries') return <Beneficiaries user={currentUser} />;
     if (activeTab === 'tasks') return <Tasks />;
     if (activeTab === 'employers') return <Employers />;
-    if (activeTab === 'export') return <Export />
+    if (activeTab === 'export') return <Export />;
     if (activeTab === 'users') return <Users />;
     if (activeTab === 'settings') return renderSimple('Настройки', 'Настройки на системата.');
     return renderDashboard();
   };
 
-  return <div className="admin-layout"><Sidebar activeTab={activeTab} onTabChange={setActiveTab} collapsed={collapsed} onToggle={() => setCollapsed(v => !v)} /><div className="admin-main"><Header onLogout={logout} currentUser={currentUser} /><main className="content-area">{renderContent()}</main></div></div>;
+  return (
+    <div className="admin-layout">
+      <Sidebar activeTab={activeTab} onTabChange={handleTabChange} collapsed={collapsed} onToggle={toggleMenu} />
+      {!collapsed && <button className="sidebar-backdrop" aria-label="Затвори менюто" onClick={() => setCollapsed(true)} />}
+      <div className="admin-main">
+        <Header onLogout={logout} currentUser={currentUser} onMenuToggle={toggleMenu} />
+        <main className="content-area">{renderContent()}</main>
+      </div>
+    </div>
+  );
 }
