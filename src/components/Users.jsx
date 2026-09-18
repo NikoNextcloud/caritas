@@ -19,6 +19,7 @@ export default function Users() {
   const [editing, setEditing] = useState(null);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
+  const [view, setView] = useState('list');
 
   async function load() {
     setLoading(true);
@@ -48,6 +49,11 @@ export default function Users() {
   const resetForm = () => {
     setForm(empty);
     setEditing(null);
+  };
+
+  const add = () => {
+    resetForm();
+    setView('add');
   };
 
   const save = async (event) => {
@@ -106,6 +112,7 @@ export default function Users() {
       role: user.role === 'admin' ? 'admin' : 'user',
       active: user.active !== false,
     });
+    setView('add');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -157,10 +164,15 @@ export default function Users() {
           <h1>Потребители</h1>
           <div className="breadcrumb">Начало / Потребители / Листване</div>
         </div>
-        <button className="btn btn-primary" onClick={resetForm}>+ Добави</button>
+        <button className="btn btn-primary" onClick={add}>+ Добави</button>
       </div>
 
-      <div className="module-form">
+      <div className="module-tabs">
+        <button className={view === 'list' ? 'active' : ''} onClick={() => { resetForm(); setView('list'); }}>Листване</button>
+        <button className={view === 'add' ? 'active' : ''} onClick={add}>{editing ? 'Редактиране' : 'Добави'}</button>
+      </div>
+
+      {view === 'add' && <div className="module-form">
         <h2>{editing ? 'Редактиране на потребител' : 'Нов потребителски профил'}</h2>
         <p className="form-help">
           Тук управляваме профила, ролята и достъпа. Самото създаване на Firebase Login акаунт се прави отделно от Firebase Authentication.
@@ -215,8 +227,9 @@ export default function Users() {
             )}
           </div>
         </form>
-      </div>
+      </div>}
 
+      {view === 'list' && <>
       <div className="table-toolbar">
         <h2>Листване</h2>
         <input
@@ -276,6 +289,7 @@ export default function Users() {
       <div className="pagination">
         <span>Брой записи: {list.length}</span>
       </div>
+      </>}
     </section>
   );
 }
