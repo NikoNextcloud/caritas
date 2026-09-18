@@ -4,6 +4,8 @@ import { database } from '../firebase';
 import { ref, get, remove, query, orderByChild, equalTo } from 'firebase/database';
 import Sidebar from './Sidebar';
 import Beneficiaries from './Beneficiaries';
+import Employers from './Employers';
+import Tasks from './Tasks';
 
 function Header({ onLogout }) {
   return (
@@ -118,8 +120,8 @@ export default function Dashboard() {
 
   const renderContent = () => {
     if (activeTab === 'beneficiaries') return <Beneficiaries />;
-    if (activeTab === 'tasks') return renderSimple('Списък Задачи', 'Тук ще управляваме задачите по същия модел като оригиналния Caritas Admin.');
-    if (activeTab === 'employers') return renderSimple('Работодатели', 'Тук ще бъдат списъкът, добавянето и редактирането на работодатели.');
+    if (activeTab === 'tasks') return <Tasks />;
+    if (activeTab === 'employers') return <Employers />;
     if (activeTab === 'export') return renderSimple('Export', 'Експорт на данните.');
     if (activeTab === 'export-epay') return renderSimple('Export EPAY', 'Експорт за EPAY.');
     if (activeTab === 'users') return renderSimple('Потребители', 'Управление на потребителите.');
