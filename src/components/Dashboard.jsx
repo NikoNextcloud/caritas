@@ -7,6 +7,7 @@ import Beneficiaries from './Beneficiaries';
 import Employers from './Employers';
 import Tasks from './Tasks';
 import Users from './Users';
+import Export from './Export';
 
 const statusLabels = { new: 'Нова', 'in-progress': 'В процес', done: 'Приключена', cancelled: 'Отказана' };
 
@@ -139,7 +140,7 @@ export default function Dashboard() {
     if (activeTab === 'beneficiaries') return <Beneficiaries user={currentUser} />;
     if (activeTab === 'tasks') return <Tasks />;
     if (activeTab === 'employers') return <Employers />;
-    if (activeTab === 'export') return renderSimple('Export', 'Експорт на данните.');
+    if (activeTab === 'export') return <Export />
     if (activeTab === 'users') return <Users />;
     if (activeTab === 'settings') return renderSimple('Настройки', 'Настройки на системата.');
     return renderDashboard();
