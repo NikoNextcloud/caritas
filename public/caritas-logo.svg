@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 72" role="img" aria-labelledby="title">
+<title>Caritas</title>
+<rect width="240" height="72" fill="white"/>
+<g transform="translate(8 8)">
+<path d="M28 3c5 11 16 17 27 18-11 2-22 8-27 19-5-11-16-17-27-19C12 20 23 14 28 3Z" fill="#e31b23"/>
+<path d="M28 9c3 7 10 11 17 12-7 2-14 6-17 13-3-7-10-11-17-13 7-1 14-5 17-12Z" fill="white"/>
+</g>
+<text x="70" y="46" font-family="Arial, Helvetica, sans-serif" font-size="34" font-weight="700" fill="#333">Caritas</text>
+</svg>
