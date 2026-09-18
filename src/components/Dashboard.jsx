@@ -6,6 +6,7 @@ import Sidebar from './Sidebar';
 import Beneficiaries from './Beneficiaries';
 import Employers from './Employers';
 import Tasks from './Tasks';
+import Users from './Users';
 
 function Header({ onLogout }) {
   return (
@@ -119,11 +120,11 @@ export default function Dashboard() {
   );
 
   const renderContent = () => {
-    if (activeTab === 'beneficiaries') return <Beneficiaries />;
+    if (activeTab === 'beneficiaries') return <Beneficiaries user={currentUser} />;
     if (activeTab === 'tasks') return <Tasks />;
     if (activeTab === 'employers') return <Employers />;
     if (activeTab === 'export') return renderSimple('Export', 'Експорт на данните.');
-    if (activeTab === 'users') return renderSimple('Потребители', 'Управление на потребителите.');
+    if (activeTab === 'users') return <Users />;
     if (activeTab === 'settings') return renderSimple('Настройки', 'Настройки на системата.');
     return renderDashboard();
   };
