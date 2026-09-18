@@ -5,9 +5,35 @@ import { ref, get, remove, query, orderByChild, equalTo } from 'firebase/databas
 import Sidebar from './Sidebar';
 import Beneficiaries from './Beneficiaries';
 
+function Header({ onLogout }) {
+  return (
+    <header className="topbar">
+      <div className="topbar-title">Caritas Administration</div>
+      <div className="topbar-actions">
+        <button className="notification-btn" title="Известия">♧<span className="notification-badge">0</span></button>
+        <div className="topbar-user"><span className="avatar">A</span><span>Администратор</span></div>
+        <button className="logout-link" onClick={onLogout}>Изход</button>
+      </div>
+    </header>
+  );
+}
+
+function TablePage({ title, children, actions }) {
+  return (
+    <section className="page-card">
+      <div className="page-heading">
+        <div><h1>{title}</h1><div className="breadcrumb">Начало / {title}</div></div>
+        {actions}
+      </div>
+      {children}
+    </section>
+  );
+}
+
 export default function Dashboard() {
   const { currentUser, isAdmin, logout } = useAuth();
   const [activeTab, setActiveTab] = useState('dashboard');
+  const [collapsed, setCollapsed] = useState(false);
   const [requests, setRequests] = useState([]);
   const [error, setError] = useState('');
 
@@ -36,61 +62,77 @@ export default function Dashboard() {
       }
       setRequests(list);
     } catch (err) {
-      console.error('Error loading requests:', err);
+      console.error(err);
       setError('Неуспешно зареждане на заявките. Провери Firebase Security Rules.');
       setRequests([]);
     }
   }, [currentUser, isAdmin]);
 
-  useEffect(() => {
-    loadRequests();
-  }, [loadRequests]);
+  useEffect(() => { loadRequests(); }, [loadRequests]);
 
   const handleDelete = async (id) => {
-    if (!isAdmin) return;
-    if (!confirm('Сигурен ли си, че искаш да изтриеш тази заявка?')) return;
+    if (!isAdmin || !confirm('Сигурен ли си, че искаш да изтриеш тази заявка?')) return;
     try {
       await remove(ref(database, `requests/${id}`));
       await loadRequests();
     } catch (err) {
-      console.error('Error deleting request:', err);
+      console.error(err);
       setError('Заявката не може да бъде изтрита.');
     }
   };
 
   const renderDashboard = () => (
-    <>
-      <h2>Основно табло</h2>
-      {error && <div style={{ background: '#fff3cd', color: '#856404', padding: '12px 16px', borderRadius: '6px', marginBottom: '20px' }}>{error}</div>}
-      <div style={{ background: 'white', padding: '20px', borderRadius: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
-        <h3>Списък със заявки</h3>
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: '15px' }}>
-            <thead><tr style={{ borderBottom: '2px solid #ddd' }}>
-              <th style={{ padding: '10px', textAlign: 'left' }}>ID</th><th style={{ padding: '10px', textAlign: 'left' }}>Описание</th><th style={{ padding: '10px', textAlign: 'left' }}>Дата</th><th style={{ padding: '10px', textAlign: 'left' }}>Статус</th>{isAdmin && <th style={{ padding: '10px' }}>Действия</th>}
-            </tr></thead>
-            <tbody>
-              {requests.map(r => <tr key={r.id} style={{ borderBottom: '1px solid #eee' }}>
-                <td style={{ padding: '10px' }}>{r.id}</td><td style={{ padding: '10px' }}>{r.description || '—'}</td><td style={{ padding: '10px' }}>{r.date || '—'}</td>
-                <td style={{ padding: '10px' }}><span style={{ background: '#17a2b8', color: 'white', padding: '4px 8px', borderRadius: '4px', fontSize: '12px' }}>{r.status || '—'}</span></td>
-                {isAdmin && <td style={{ padding: '10px' }}><button onClick={() => handleDelete(r.id)} style={{ background: '#dc3545', color: 'white', border: 'none', padding: '5px 10px', borderRadius: '4px', cursor: 'pointer' }}>Изтрий</button></td>}
-              </tr>)}
-              {requests.length === 0 && <tr><td colSpan={isAdmin ? 5 : 4} style={{ padding: '20px', textAlign: 'center', color: '#777' }}>Няма заявки.</td></tr>}
-            </tbody>
-          </table>
-        </div>
+    <TablePage title="Основно табло" actions={<button className="btn btn-primary">+ Нова заявка</button>}>
+      {error && <div className="alert">{error}</div>}
+      <div className="stats-grid">
+        <div className="stat-card"><span>Заявки</span><strong>{requests.length}</strong></div>
+        <div className="stat-card"><span>Бенефициенти</span><strong>—</strong></div>
+        <div className="stat-card"><span>Работодатели</span><strong>—</strong></div>
+        <div className="stat-card"><span>Потребители</span><strong>—</strong></div>
       </div>
-    </>
+      <div className="table-toolbar"><h2>Списък със заявки</h2><button className="btn btn-light">Филтри</button></div>
+      <div className="table-wrap">
+        <table className="admin-table">
+          <thead><tr><th>ID</th><th>Описание</th><th>Дата</th><th>Статус</th>{isAdmin && <th>Действия</th>}</tr></thead>
+          <tbody>
+            {requests.map(r => (
+              <tr key={r.id}>
+                <td>{r.id}</td><td>{r.description || '—'}</td><td>{r.date || '—'}</td>
+                <td><span className="status-badge">{r.status || '—'}</span></td>
+                {isAdmin && <td><button className="table-action danger" onClick={() => handleDelete(r.id)}>Изтрий</button></td>}
+              </tr>
+            ))}
+            {!requests.length && <tr><td colSpan={isAdmin ? 5 : 4} className="empty-row">Няма заявки.</td></tr>}
+          </tbody>
+        </table>
+      </div>
+      <div className="pagination"><span>Брой записи: {requests.length}</span><div><button>5</button><button>10</button><button className="selected">20</button><button>30</button><button>50</button></div></div>
+    </TablePage>
   );
 
+  const renderSimple = (title, text) => (
+    <TablePage title={title} actions={<button className="btn btn-primary">+ Добави</button>}>
+      <div className="empty-module"><div className="empty-icon">▦</div><h2>{title}</h2><p>{text}</p></div>
+    </TablePage>
+  );
+
+  const renderContent = () => {
+    if (activeTab === 'beneficiaries') return <Beneficiaries />;
+    if (activeTab === 'tasks') return renderSimple('Списък Задачи', 'Тук ще управляваме задачите по същия модел като оригиналния Caritas Admin.');
+    if (activeTab === 'employers') return renderSimple('Работодатели', 'Тук ще бъдат списъкът, добавянето и редактирането на работодатели.');
+    if (activeTab === 'export') return renderSimple('Export', 'Експорт на данните.');
+    if (activeTab === 'export-epay') return renderSimple('Export EPAY', 'Експорт за EPAY.');
+    if (activeTab === 'users') return renderSimple('Потребители', 'Управление на потребителите.');
+    if (activeTab === 'settings') return renderSimple('Настройки', 'Настройки на системата.');
+    return renderDashboard();
+  };
+
   return (
-    <div style={{ display: 'flex', minHeight: '100vh' }}>
-      <Sidebar activeTab={activeTab} onTabChange={setActiveTab} />
-      <div style={{ flex: 1, padding: '20px', background: '#f5f5f5' }}>
-        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '20px' }}>
-          <button onClick={logout} style={{ padding: '8px 16px', background: '#dc3545', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>Изход</button>
-        </div>
-        {activeTab === 'beneficiaries' ? <Beneficiaries /> : renderDashboard()}
+    <div className="admin-layout">
+      <Sidebar activeTab={activeTab} onTabChange={setActiveTab} collapsed={collapsed} onToggle={() => setCollapsed(v => !v)} />
+      <div className="admin-main">
+        <Header onLogout={logout} />
+        <main className="content-area">{renderContent()}</main>
       </div>
     </div>
   );
