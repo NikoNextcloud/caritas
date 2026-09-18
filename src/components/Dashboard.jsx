@@ -17,6 +17,7 @@ function Header({ onLogout, currentUser, onMenuToggle }) {
     <header className="topbar">
       <div className="topbar-left">
         <button className="mobile-menu-btn" onClick={onMenuToggle} aria-label="Отвори меню">☰</button>
+        <img className="topbar-logo" src="/caritas-logo.svg" alt="Лого" />
       </div>
       <div className="topbar-actions">
         <button className="notification-btn" title="Известия">♧<span className="notification-badge">0</span></button>
