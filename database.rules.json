@@ -2,21 +2,26 @@
   "rules": {
     ".read": false,
     ".write": false,
+
     "users": {
       "$uid": {
-        ".read": "auth != null && (auth.uid === $uid || root.child('users').child(auth.uid).child('role').val() === 'admin')",
-        ".write": "auth != null && root.child('users').child(auth.uid).child('role').val() === 'admin'"
+        ".read": "auth != null && (auth.uid == $uid || root.child('users').child(auth.uid).child('role').val() == 'admin')",
+        ".write": "auth != null && root.child('users').child(auth.uid).child('role').val() == 'admin'"
       }
     },
+
     "requests": {
-      ".indexOn": ["createdBy", "assignedTo"],
-      ".read": "auth != null && (root.child('users').child(auth.uid).child('role').val() === 'admin' || ((query.orderByChild === 'createdBy' || query.orderByChild === 'assignedTo') && query.equalTo === auth.uid))",
-      "$requestId": {
-        ".read": "auth != null && (root.child('users').child(auth.uid).child('role').val() === 'admin' || data.child('createdBy').val() === auth.uid || data.child('assignedTo').val() === auth.uid)",
-        ".write": "auth != null && (root.child('users').child(auth.uid).child('role').val() === 'admin' || (!data.exists() && newData.child('createdBy').val() === auth.uid) || (data.exists() && data.child('createdBy').val() === auth.uid && newData.child('createdBy').val() === auth.uid))"
-      }
+      ".read": "auth != null",
+      ".write": "auth != null",
+      ".indexOn": ["createdBy", "assignedTo"]
     },
+
     "beneficiaries": {
+      ".read": "auth != null",
+      ".write": "auth != null"
+    },
+
+    "employers": {
       ".read": "auth != null",
       ".write": "auth != null"
     }
