@@ -8,13 +8,16 @@ import Employers from './Employers';
 import Tasks from './Tasks';
 import Users from './Users';
 
-function Header({ onLogout }) {
+const statusLabels = { new: 'Нова', 'in-progress': 'В процес', done: 'Приключена', cancelled: 'Отказана' };
+
+function Header({ onLogout, currentUser }) {
+  const displayName = currentUser?.displayName || currentUser?.email || 'Потребител';
   return (
     <header className="topbar">
       <div className="topbar-title">Caritas Administration</div>
       <div className="topbar-actions">
         <button className="notification-btn" title="Известия">♧<span className="notification-badge">0</span></button>
-        <div className="topbar-user"><span className="avatar">A</span><span>Администратор</span></div>
+        <div className="topbar-user"><span className="avatar">{displayName.charAt(0).toUpperCase()}</span><span>{displayName}</span></div>
         <button className="logout-link" onClick={onLogout}>Изход</button>
       </div>
     </header>
@@ -22,15 +25,7 @@ function Header({ onLogout }) {
 }
 
 function TablePage({ title, children, actions }) {
-  return (
-    <section className="page-card">
-      <div className="page-heading">
-        <div><h1>{title}</h1><div className="breadcrumb">Начало / {title}</div></div>
-        {actions}
-      </div>
-      {children}
-    </section>
-  );
+  return <section className="page-card"><div className="page-heading"><div><h1>{title}</h1><div className="breadcrumb">Начало / {title}</div></div>{actions}</div>{children}</section>;
 }
 
 export default function Dashboard() {
@@ -38,12 +33,28 @@ export default function Dashboard() {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [collapsed, setCollapsed] = useState(false);
   const [requests, setRequests] = useState([]);
+  const [stats, setStats] = useState({ beneficiaries: 0, employers: 0, users: 0 });
   const [error, setError] = useState('');
+  const [loadingStats, setLoadingStats] = useState(true);
 
-  const loadRequests = useCallback(async () => {
+  const loadDashboard = useCallback(async () => {
     if (!currentUser) return;
     try {
       setError('');
+      setLoadingStats(true);
+
+      const [beneficiariesSnap, employersSnap, usersSnap] = await Promise.all([
+        get(ref(database, 'beneficiaries')),
+        get(ref(database, 'employers')),
+        get(ref(database, 'users')),
+      ]);
+
+      setStats({
+        beneficiaries: beneficiariesSnap.exists() ? Object.keys(beneficiariesSnap.val()).length : 0,
+        employers: employersSnap.exists() ? Object.keys(employersSnap.val()).length : 0,
+        users: usersSnap.exists() ? Object.keys(usersSnap.val()).length : 0,
+      });
+
       let list = [];
       if (isAdmin) {
         const snapshot = await get(ref(database, 'requests'));
@@ -63,61 +74,66 @@ export default function Dashboard() {
         });
         list = Array.from(byId.values());
       }
+
+      list.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
       setRequests(list);
     } catch (err) {
       console.error(err);
-      setError('Неуспешно зареждане на заявките. Провери Firebase Security Rules.');
+      setError('Неуспешно зареждане на таблото. Провери Firebase Security Rules.');
       setRequests([]);
+    } finally {
+      setLoadingStats(false);
     }
   }, [currentUser, isAdmin]);
 
-  useEffect(() => { loadRequests(); }, [loadRequests]);
+  useEffect(() => { loadDashboard(); }, [loadDashboard]);
 
   const handleDelete = async (id) => {
     if (!isAdmin || !confirm('Сигурен ли си, че искаш да изтриеш тази заявка?')) return;
     try {
       await remove(ref(database, `requests/${id}`));
-      await loadRequests();
+      await loadDashboard();
     } catch (err) {
       console.error(err);
       setError('Заявката не може да бъде изтрита.');
     }
   };
 
+  const openTasks = () => setActiveTab('tasks');
+
   const renderDashboard = () => (
-    <TablePage title="Основно табло" actions={<button className="btn btn-primary">+ Нова заявка</button>}>
+    <TablePage title="Основно табло" actions={<button className="btn btn-primary" onClick={openTasks}>+ Нова задача</button>}>
       {error && <div className="alert">{error}</div>}
       <div className="stats-grid">
-        <div className="stat-card"><span>Заявки</span><strong>{requests.length}</strong></div>
-        <div className="stat-card"><span>Бенефициенти</span><strong>—</strong></div>
-        <div className="stat-card"><span>Работодатели</span><strong>—</strong></div>
-        <div className="stat-card"><span>Потребители</span><strong>—</strong></div>
+        <div className="stat-card"><span>Заявки</span><strong>{loadingStats ? '...' : requests.length}</strong></div>
+        <div className="stat-card"><span>Бенефициенти</span><strong>{loadingStats ? '...' : stats.beneficiaries}</strong></div>
+        <div className="stat-card"><span>Работодатели</span><strong>{loadingStats ? '...' : stats.employers}</strong></div>
+        <div className="stat-card"><span>Потребители</span><strong>{loadingStats ? '...' : stats.users}</strong></div>
       </div>
-      <div className="table-toolbar"><h2>Списък със заявки</h2><button className="btn btn-light">Филтри</button></div>
+      <div className="table-toolbar"><h2>Последни задачи</h2><button className="btn btn-light" onClick={openTasks}>Виж всички</button></div>
       <div className="table-wrap">
         <table className="admin-table">
-          <thead><tr><th>ID</th><th>Описание</th><th>Дата</th><th>Статус</th>{isAdmin && <th>Действия</th>}</tr></thead>
+          <thead><tr><th>Задача</th><th>Бенефициент</th><th>Работодател</th><th>Срок</th><th>Статус</th>{isAdmin && <th>Действия</th>}</tr></thead>
           <tbody>
-            {requests.map(r => (
+            {requests.slice(0, 10).map(r => (
               <tr key={r.id}>
-                <td>{r.id}</td><td>{r.description || '—'}</td><td>{r.date || '—'}</td>
-                <td><span className="status-badge">{r.status || '—'}</span></td>
+                <td><strong>{r.title || r.description || '—'}</strong></td>
+                <td>{r.beneficiaryName || '—'}</td>
+                <td>{r.employerName || '—'}</td>
+                <td>{r.dueDate || r.date || '—'}</td>
+                <td><span className="status-badge">{statusLabels[r.status] || r.status || '—'}</span></td>
                 {isAdmin && <td><button className="table-action danger" onClick={() => handleDelete(r.id)}>Изтрий</button></td>}
               </tr>
             ))}
-            {!requests.length && <tr><td colSpan={isAdmin ? 5 : 4} className="empty-row">Няма заявки.</td></tr>}
+            {!requests.length && <tr><td colSpan={isAdmin ? 6 : 5} className="empty-row">{loadingStats ? 'Зареждане...' : 'Няма задачи.'}</td></tr>}
           </tbody>
         </table>
       </div>
-      <div className="pagination"><span>Брой записи: {requests.length}</span><div><button>5</button><button>10</button><button className="selected">20</button><button>30</button><button>50</button></div></div>
+      <div className="pagination"><span>Показани: {Math.min(requests.length, 10)} от {requests.length}</span><button className="btn btn-light" onClick={openTasks}>Отвори списъка</button></div>
     </TablePage>
   );
 
-  const renderSimple = (title, text) => (
-    <TablePage title={title} actions={<button className="btn btn-primary">+ Добави</button>}>
-      <div className="empty-module"><div className="empty-icon">▦</div><h2>{title}</h2><p>{text}</p></div>
-    </TablePage>
-  );
+  const renderSimple = (title, text) => <TablePage title={title} actions={<button className="btn btn-primary">+ Добави</button>}><div className="empty-module"><div className="empty-icon">▦</div><h2>{title}</h2><p>{text}</p></div></TablePage>;
 
   const renderContent = () => {
     if (activeTab === 'beneficiaries') return <Beneficiaries user={currentUser} />;
@@ -129,13 +145,5 @@ export default function Dashboard() {
     return renderDashboard();
   };
 
-  return (
-    <div className="admin-layout">
-      <Sidebar activeTab={activeTab} onTabChange={setActiveTab} collapsed={collapsed} onToggle={() => setCollapsed(v => !v)} />
-      <div className="admin-main">
-        <Header onLogout={logout} />
-        <main className="content-area">{renderContent()}</main>
-      </div>
-    </div>
-  );
+  return <div className="admin-layout"><Sidebar activeTab={activeTab} onTabChange={setActiveTab} collapsed={collapsed} onToggle={() => setCollapsed(v => !v)} /><div className="admin-main"><Header onLogout={logout} currentUser={currentUser} /><main className="content-area">{renderContent()}</main></div></div>;
 }
