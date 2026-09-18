@@ -123,7 +123,6 @@ export default function Dashboard() {
     if (activeTab === 'tasks') return <Tasks />;
     if (activeTab === 'employers') return <Employers />;
     if (activeTab === 'export') return renderSimple('Export', 'Експорт на данните.');
-    if (activeTab === 'export-epay') return renderSimple('Export EPAY', 'Експорт за EPAY.');
     if (activeTab === 'users') return renderSimple('Потребители', 'Управление на потребителите.');
     if (activeTab === 'settings') return renderSimple('Настройки', 'Настройки на системата.');
     return renderDashboard();
