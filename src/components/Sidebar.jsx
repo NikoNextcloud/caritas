@@ -6,7 +6,6 @@ const menu = [
   { id: 'beneficiaries', label: 'Бенефициенти', icon: '♙' },
   { id: 'employers', label: 'Работодатели', icon: '▤' },
   { id: 'export', label: 'Export', icon: '⇩' },
-  { id: 'export-epay', label: 'Export EPAY', icon: '€' },
 ];
 
 export default function Sidebar({ activeTab, onTabChange, collapsed, onToggle }) {
