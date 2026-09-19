@@ -3,6 +3,7 @@
     ".read": false,
     ".write": false,
     "users": {
+      ".read": "auth != null && root.child('users').child(auth.uid).child('role').val() == 'admin'",
       "$uid": {
         ".read": "auth != null && (auth.uid == $uid || root.child('users').child(auth.uid).child('role').val() == 'admin')",
         ".write": "auth != null && root.child('users').child(auth.uid).child('role').val() == 'admin'"
@@ -22,6 +23,18 @@
     "employers": {
       ".read": "auth != null",
       ".write": "auth != null"
+    },
+    "auditLogs": {
+      ".read": "auth != null && root.child('users').child(auth.uid).child('role').val() == 'admin'",
+      "$id": {
+        ".write": "auth != null && !data.exists() && newData.child('userId').val() == auth.uid"
+      }
+    },
+    "settings": {
+      "system": {
+        ".read": "auth != null",
+        ".write": "auth != null && root.child('users').child(auth.uid).child('role').val() == 'admin'"
+      }
     }
   }
 }
