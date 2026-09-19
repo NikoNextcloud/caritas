@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { get, push, ref, remove, update } from 'firebase/database';
 import { database } from '../firebase';
 import { useAuth } from '../contexts/AuthContext';
+import { logAudit } from '../utils/audit';
 
 const empty = {
   uid: '',
@@ -13,7 +14,7 @@ const empty = {
 };
 
 export default function Users() {
-  const { isAdmin } = useAuth();
+  const { currentUser, isAdmin } = useAuth();
   const [items, setItems] = useState({});
   const [form, setForm] = useState(empty);
   const [editing, setEditing] = useState(null);
@@ -83,6 +84,7 @@ export default function Users() {
           ...current,
           [editing]: { ...current[editing], ...data },
         }));
+        await logAudit({ user: currentUser, action: 'Редактиране', module: 'Потребители', recordId: editing, details: data.name });
       } else {
         const existing = items[uid];
         if (existing) return alert('Вече има профил с този UID.');
@@ -94,6 +96,7 @@ export default function Users() {
           ...current,
           [uid]: { ...data, createdAt: Date.now() },
         }));
+        await logAudit({ user: currentUser, action: 'Добавяне', module: 'Потребители', recordId: uid, details: data.name });
       }
 
       resetForm();
@@ -128,6 +131,7 @@ export default function Users() {
         delete next[uid];
         return next;
       });
+      await logAudit({ user: currentUser, action: 'Изтриване', module: 'Потребители', recordId: uid, details: items[uid]?.name || '' });
       if (editing === uid) resetForm();
     } catch (error) {
       alert('Грешка при изтриване: ' + error.message);
