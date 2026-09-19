@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { get, push, ref, remove, update } from 'firebase/database';
 import { database } from '../firebase';
 import { useAuth } from '../contexts/AuthContext';
+import { logAudit } from '../utils/audit';
 
 const empty = {
   name: '',
@@ -83,11 +84,13 @@ export default function Employers() {
           ...current,
           [editing]: { ...current[editing], ...data },
         }));
+        await logAudit({ user: currentUser, action: 'Редактиране', module: 'Работодатели', recordId: editing, details: data.name });
       } else {
         const record = push(ref(database, 'employers'));
         const created = { ...data, createdBy: currentUser?.uid || 'unknown', createdAt: now };
         await update(record, created);
         setItems((current) => ({ ...current, [record.key]: created }));
+        await logAudit({ user: currentUser, action: 'Добавяне', module: 'Работодатели', recordId: record.key, details: created.name });
       }
 
       reset();
@@ -119,6 +122,7 @@ export default function Employers() {
     try {
       setSaving(true);
       await remove(ref(database, 'employers/' + id));
+      await logAudit({ user: currentUser, action: 'Изтриване', module: 'Работодатели', recordId: id, details: items[id]?.name || '' });
       setItems((current) => {
         const next = { ...current };
         delete next[id];
