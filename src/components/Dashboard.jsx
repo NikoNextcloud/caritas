@@ -36,13 +36,29 @@ function TablePage({ title, children, actions }) {
 export default function Dashboard() {
   const { currentUser, isAdmin, logout } = useAuth();
   const [activeTab, setActiveTab] = useState('dashboard');
-  const [collapsed, setCollapsed] = useState(() => typeof window !== 'undefined' && window.innerWidth <= 600);
+  const [collapsed, setCollapsed] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    if (window.innerWidth <= 600) return true;
+    try {
+      const settings = JSON.parse(localStorage.getItem('caritasSettings') || '{}');
+      return settings.rememberMenu ? Boolean(JSON.parse(localStorage.getItem('caritasMenuCollapsed') || 'false')) : false;
+    } catch {
+      return false;
+    }
+  });
   const [requests, setRequests] = useState([]);
   const [stats, setStats] = useState({ beneficiaries: 0, employers: 0, users: 0 });
   const [error, setError] = useState('');
   const [loadingStats, setLoadingStats] = useState(true);
 
-  const toggleMenu = () => setCollapsed(v => !v);
+  const toggleMenu = () => setCollapsed(v => {
+    const next = !v;
+    try {
+      const settings = JSON.parse(localStorage.getItem('caritasSettings') || '{}');
+      if (settings.rememberMenu !== false) localStorage.setItem('caritasMenuCollapsed', JSON.stringify(next));
+    } catch {}
+    return next;
+  });
 
   const handleTabChange = (tab) => {
     setActiveTab(tab);
