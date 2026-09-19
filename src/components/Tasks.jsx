@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { get, push, ref, remove, update } from 'firebase/database';
 import { database } from '../firebase';
 import { useAuth } from '../contexts/AuthContext';
+import { logAudit } from '../utils/audit';
 
 const empty = {
   title: '',
@@ -32,21 +33,24 @@ export default function Tasks() {
   const [view, setView] = useState('list');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [systemSettings, setSystemSettings] = useState({ taskDefaultStatus: 'new', taskDefaultDueDays: 7 });
 
   async function load() {
     setLoading(true);
     try {
-      const [tasksSnap, beneficiariesSnap, employersSnap, usersSnap] = await Promise.all([
+      const [tasksSnap, beneficiariesSnap, employersSnap, usersSnap, systemSnap] = await Promise.all([
         get(ref(database, 'requests')),
         get(ref(database, 'beneficiaries')),
         get(ref(database, 'employers')),
         get(ref(database, 'users')),
+        get(ref(database, 'settings/system')),
       ]);
 
       setItems(tasksSnap.exists() ? tasksSnap.val() : {});
       setBeneficiaries(beneficiariesSnap.exists() ? beneficiariesSnap.val() : {});
       setEmployers(employersSnap.exists() ? employersSnap.val() : {});
       setUsers(usersSnap.exists() ? usersSnap.val() : {});
+      if (systemSnap.exists()) setSystemSettings((current) => ({ ...current, ...systemSnap.val() }));
     } catch (error) {
       alert('Грешка при зареждане на задачите: ' + error.message);
     } finally {
@@ -105,6 +109,9 @@ export default function Tasks() {
 
   const add = () => {
     reset();
+    const days = Math.max(0, Number(systemSettings.taskDefaultDueDays) || 0);
+    const due = new Date(Date.now() + days * 86400000).toISOString().slice(0, 10);
+    setForm((current) => ({ ...current, status: systemSettings.taskDefaultStatus || 'new', dueDate: due }));
     setView('add');
   };
 
@@ -151,6 +158,7 @@ export default function Tasks() {
           ...current,
           [editing]: { ...current[editing], ...data },
         }));
+        await logAudit({ user: currentUser, action: 'Редактиране', module: 'Задачи', recordId: editing, details: data.title });
       } else {
         const record = push(ref(database, 'requests'));
         const created = {
@@ -160,6 +168,7 @@ export default function Tasks() {
         };
         await update(record, created);
         setItems((current) => ({ ...current, [record.key]: created }));
+        await logAudit({ user: currentUser, action: 'Добавяне', module: 'Задачи', recordId: record.key, details: created.title });
       }
 
       reset();
@@ -186,6 +195,7 @@ export default function Tasks() {
         delete next[id];
         return next;
       });
+      await logAudit({ user: currentUser, action: 'Изтриване', module: 'Задачи', recordId: id, details: task?.title || '' });
       if (editing === id) reset();
     } catch (error) {
       alert('Грешка при изтриване: ' + error.message);
