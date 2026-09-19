@@ -589,3 +589,50 @@ html[data-density="compact"] .admin-table th { padding-top:9px; padding-bottom:9
   .settings-audit-card { grid-column:auto; }
   .audit-wrap { margin:0 -4px; }
 }
+
+
+/* Final sidebar collapse/expand controls */
+@media (min-width:901px) {
+  .caritas-sidebar.collapsed .sidebar-brand {
+    height:96px;
+    padding:8px 6px;
+    flex-direction:column;
+    gap:4px;
+  }
+  .caritas-sidebar.collapsed .sidebar-logo {
+    width:38px;
+    height:38px;
+  }
+  .caritas-sidebar.collapsed .sidebar-toggle {
+    display:flex !important;
+    position:static;
+    width:32px;
+    height:28px;
+    margin:0;
+    align-items:center;
+    justify-content:center;
+    border-radius:6px;
+    font-size:15px;
+  }
+  .caritas-sidebar:not(.collapsed) .sidebar-toggle {
+    display:flex !important;
+    align-items:center;
+    justify-content:center;
+  }
+}
+@media (max-width:900px) and (min-width:601px) {
+  .caritas-sidebar.collapsed .sidebar-toggle {
+    display:flex !important;
+    position:static;
+    width:30px;
+    height:28px;
+    margin:2px auto 0;
+  }
+  .caritas-sidebar.collapsed .sidebar-brand {
+    height:92px;
+    padding:6px;
+    flex-direction:column;
+    gap:3px;
+  }
+  .caritas-sidebar.collapsed .sidebar-logo { width:38px; height:38px; }
+}
