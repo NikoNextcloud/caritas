@@ -10,6 +10,7 @@
       }
     },
     "requests": {
+      ".read": "auth != null && (root.child('users').child(auth.uid).child('role').val() == 'admin' || (query.orderByChild == 'createdBy' && query.equalTo == auth.uid) || (query.orderByChild == 'assignedTo' && query.equalTo == auth.uid))",
       ".indexOn": ["createdBy", "assignedTo"],
       "$id": {
         ".read": "auth != null && (root.child('users').child(auth.uid).child('role').val() == 'admin' || data.child('createdBy').val() == auth.uid || data.child('assignedTo').val() == auth.uid)",
