@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { get, push, ref, remove, update } from 'firebase/database';
+import { equalTo, get, orderByChild, push, query, ref, remove, update } from 'firebase/database';
 import { database } from '../firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { logAudit } from '../utils/audit';
@@ -38,18 +38,34 @@ export default function Tasks() {
   async function load() {
     setLoading(true);
     try {
+      const taskRead = isAdmin
+        ? get(ref(database, 'requests'))
+        : Promise.all([
+            get(query(ref(database, 'requests'), orderByChild('createdBy'), equalTo(currentUser.uid))),
+            get(query(ref(database, 'requests'), orderByChild('assignedTo'), equalTo(currentUser.uid))),
+          ]).then(([createdSnap, assignedSnap]) => {
+            const merged = {};
+            if (createdSnap.exists()) Object.assign(merged, createdSnap.val());
+            if (assignedSnap.exists()) Object.assign(merged, assignedSnap.val());
+            return { exists: () => Object.keys(merged).length > 0, val: () => merged };
+          });
+
+      const userRead = isAdmin
+        ? get(ref(database, 'users'))
+        : get(ref(database, 'users/' + currentUser.uid));
+
       const [tasksSnap, beneficiariesSnap, employersSnap, usersSnap, systemSnap] = await Promise.all([
-        get(ref(database, 'requests')),
+        taskRead,
         get(ref(database, 'beneficiaries')),
         get(ref(database, 'employers')),
-        get(ref(database, 'users')),
+        userRead,
         get(ref(database, 'settings/system')),
       ]);
 
       setItems(tasksSnap.exists() ? tasksSnap.val() : {});
       setBeneficiaries(beneficiariesSnap.exists() ? beneficiariesSnap.val() : {});
       setEmployers(employersSnap.exists() ? employersSnap.val() : {});
-      setUsers(usersSnap.exists() ? usersSnap.val() : {});
+      setUsers(isAdmin ? (usersSnap.exists() ? usersSnap.val() : {}) : (usersSnap.exists() ? { [currentUser.uid]: usersSnap.val() } : {}));
       if (systemSnap.exists()) setSystemSettings((current) => ({ ...current, ...systemSnap.val() }));
     } catch (error) {
       alert('Грешка при зареждане на задачите: ' + error.message);
@@ -60,7 +76,7 @@ export default function Tasks() {
 
   useEffect(() => {
     load();
-  }, []);
+  }, [currentUser, isAdmin]);
 
   const beneficiaryList = useMemo(
     () => Object.entries(beneficiaries)
