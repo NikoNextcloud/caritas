@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { get, push, ref, remove, update } from 'firebase/database';
 import { database } from '../firebase';
+import { logAudit } from '../utils/audit';
 
 const MAX_PHOTO_BYTES = 300 * 1024;
 const MAX_PHOTO_DIMENSION = 500;
@@ -42,11 +43,11 @@ export default function Beneficiaries({ user }) {
  const edit=x=>{setEditing(x.firebaseKey);setPhotoInputKey(k=>k+1);setForm({firstName:x.firstName||'',middleName:x.middleName||'',lastName:x.lastName||'',gender:x.gender||'',birthDate:x.birthDate||'',identifier:x.identifier||'',status:x.status||'active',photo:x.photo||''});setView('add');window.scrollTo({top:0,behavior:'smooth'})};
  const photo=async e=>{const f=e.target.files?.[0];if(!f)return;if(!f.type.startsWith('image/'))return alert('Моля, избери изображение.');try{setSaving(true);const compressed=await compressImage(f);setForm(x=>({...x,photo:compressed}))}catch(err){alert('Грешка при снимката: '+err.message)}finally{setSaving(false)}};
  const save=async e=>{e.preventDefault();if(!form.firstName.trim()||!form.lastName.trim())return alert('Собствено име и фамилия са задължителни.');if(form.identifier.trim().length>100)return alert('Идентификаторът е прекалено дълъг.');try{setSaving(true);const id=editing?items[editing]?.id:nextId(items);const data={id:Number(id),firstName:form.firstName.trim(),middleName:form.middleName.trim(),lastName:form.lastName.trim(),gender:form.gender,birthDate:form.birthDate,identifier:form.identifier.trim(),status:form.status,active:form.status==='active',archived:form.status==='archived',photo:form.photo||'',updatedBy:user?.uid||'unknown',updatedAt:Date.now()};
- if(editing){await update(ref(database,'beneficiaries/'+editing),data);setItems(p=>({...p,[editing]:{...p[editing],...data}}))}
- else {const r=push(ref(database,'beneficiaries'));const x={...data,createdBy:user?.uid||'unknown',createdAt:Date.now()};await update(r,x);setItems(p=>({...p,[r.key]:x}))}
+ if(editing){await update(ref(database,'beneficiaries/'+editing),data);setItems(p=>({...p,[editing]:{...p[editing],...data}}));await logAudit({user,action:'Редактиране',module:'Бенефициенти',recordId:editing,details:[data.firstName,data.lastName].filter(Boolean).join(' ')})}
+ else {const r=push(ref(database,'beneficiaries'));const x={...data,createdBy:user?.uid||'unknown',createdAt:Date.now()};await update(r,x);setItems(p=>({...p,[r.key]:x}));await logAudit({user,action:'Добавяне',module:'Бенефициенти',recordId:r.key,details:[x.firstName,x.lastName].filter(Boolean).join(' ')})}
  reset();setView('list');
  }catch(err){alert('Грешка при записване: '+err.message)}finally{setSaving(false)}};
- const del=async x=>{if(!confirm('Сигурен ли си, че искаш да изтриеш бенефициент №'+x.id+'?'))return;try{setSaving(true);await remove(ref(database,'beneficiaries/'+x.firebaseKey));setItems(p=>{const n={...p};delete n[x.firebaseKey];return n});if(editing===x.firebaseKey)reset()}catch(e){alert('Грешка при изтриване: '+e.message)}finally{setSaving(false)}};
+ const del=async x=>{if(!confirm('Сигурен ли си, че искаш да изтриеш бенефициент №'+x.id+'?'))return;try{setSaving(true);await remove(ref(database,'beneficiaries/'+x.firebaseKey));await logAudit({user,action:'Изтриване',module:'Бенефициенти',recordId:x.firebaseKey,details:[x.firstName,x.lastName].filter(Boolean).join(' ')});setItems(p=>{const n={...p};delete n[x.firebaseKey];return n});if(editing===x.firebaseKey)reset()}catch(e){alert('Грешка при изтриване: '+e.message)}finally{setSaving(false)}};
 
  return <section className="page-card beneficiaries-page">
   <div className="page-heading"><div><h1>Бенефициенти</h1><div className="breadcrumb">Начало / Бенефициенти</div></div><button className="btn btn-primary" onClick={add}>+ Добави</button></div>
