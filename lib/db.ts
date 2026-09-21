@@ -23,18 +23,27 @@ export async function getRequests(params: {
   page?: number; perPage?: number; search?: SearchParams
 } = {}) {
   const { page = 1, perPage = 20, search } = params
-  let q = query(requestsCol, orderBy('createdAt', 'desc'))
-  if (search?.status) q = query(q, where('status', '==', search.status))
+
+  // Без orderBy за да избегнем нужда от composite index
+  let q = query(requestsCol)
+
+  // Прилагаме само status filter server-side (не изисква индекс)
+  if (search?.status) {
+    q = query(requestsCol, where('status', '==', search.status))
+  }
 
   const snap = await getDocs(q)
   let all = snap.docs.map(d => ({ id: d.id, ...d.data() } as BeneficiaryRequest))
 
-  // client-side filters
+  // Всички останали филтри client-side
   if (search?.id)          all = all.filter(r => r.id.includes(search.id!))
   if (search?.beneficiary) all = all.filter(r => r.beneficiaryName?.toLowerCase().includes(search.beneficiary!.toLowerCase()))
   if (search?.activity)    all = all.filter(r => r.activity?.toLowerCase().includes(search.activity!.toLowerCase()))
   if (search?.dateFrom)    all = all.filter(r => r.createdAt >= search.dateFrom!)
   if (search?.dateTo)      all = all.filter(r => r.createdAt <= search.dateTo!)
+
+  // Сортираме client-side по createdAt desc
+  all.sort((a, b) => (b.createdAt ?? '').localeCompare(a.createdAt ?? ''))
 
   const start = (page - 1) * perPage
   return { data: all.slice(start, start + perPage), total: all.length, page, perPage }

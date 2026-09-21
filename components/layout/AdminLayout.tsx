@@ -1,6 +1,7 @@
 'use client'
 import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
+import Image from 'next/image'
 import { usePathname, useRouter } from 'next/navigation'
 import {
   LayoutDashboard, CheckSquare, Users, Briefcase,
@@ -108,10 +109,20 @@ export default function AdminLayout({ children, userName = 'Администра
         style={{ background: '#222d32' }}
       >
         {/* Logo */}
-        <div className="flex items-center px-4 py-3 border-b border-[#1a2226]"
+        <div className="flex items-center gap-3 px-4 py-2 border-b border-[#1a2226]"
           style={{ background: '#3c8dbc' }}>
-          <Link href="/admin/dashboard" className="text-white font-bold text-xl tracking-wide">
-            <span className="font-black">C</span>aritas
+          <Link href="/admin/dashboard" className="flex items-center gap-3">
+            <Image
+              src="/logo.png"
+              alt="Caritas Logo"
+              width={36}
+              height={36}
+              className="rounded-sm flex-shrink-0"
+              style={{ filter: 'brightness(0) invert(1)' }}
+            />
+            <span className="text-white font-bold text-xl tracking-wide">
+              <span className="font-black">C</span>aritas
+            </span>
           </Link>
         </div>
 

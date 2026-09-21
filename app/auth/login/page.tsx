@@ -1,6 +1,7 @@
 'use client'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import Image from 'next/image'
 import { login } from '@/lib/auth'
 import toast, { Toaster } from 'react-hot-toast'
 
@@ -36,7 +37,16 @@ export default function LoginPage() {
       <div className="w-full max-w-sm">
         {/* Logo */}
         <div className="text-center mb-6">
-          <h1 className="text-4xl font-light text-gray-600">
+          <div className="flex justify-center mb-3">
+            <Image
+              src="/logo.png"
+              alt="Caritas Logo"
+              width={80}
+              height={80}
+              className="rounded-lg"
+            />
+          </div>
+          <h1 className="text-3xl font-light text-gray-600">
             <span className="font-bold" style={{ color: '#3c8dbc' }}>C</span>aritas
           </h1>
           <p className="text-gray-500 text-sm mt-1">Здравей! Можеш да се логнеш в администрацията</p>

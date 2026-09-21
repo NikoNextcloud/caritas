@@ -3,12 +3,20 @@ import './globals.css'
 
 export const metadata: Metadata = {
   title: 'Caritas Admin',
-  description: 'Caritas Administrative Panel',
+  description: 'Caritas Vitania Administrative Panel',
+  icons: {
+    icon: '/favicon.ico',
+    apple: '/apple-icon.png',
+  },
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="bg">
+      <head>
+        <link rel="icon" href="/favicon.ico" sizes="any" />
+        <link rel="apple-touch-icon" href="/apple-icon.png" />
+      </head>
       <body>{children}</body>
     </html>
   )
