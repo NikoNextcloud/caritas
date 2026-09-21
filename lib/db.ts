@@ -1,6 +1,7 @@
 import {
   collection, doc, getDocs, getDoc, addDoc, updateDoc, deleteDoc,
-  query, where, orderBy, limit, onSnapshot, writeBatch, Timestamp
+  query, where, orderBy, limit, onSnapshot, writeBatch,
+  type DocumentSnapshot, type DocumentData
 } from 'firebase/firestore'
 import { db } from './firebase'
 import type {
@@ -10,7 +11,7 @@ import type {
 
 const now = () => new Date().toISOString()
 
-function toData<T>(snap: { exists: () => boolean; id: string; data: () => Record<string, unknown> }): T | null {
+function toData<T>(snap: { exists: () => boolean; id: string; data: () => Record<string, unknown> | undefined }): T | null {
   if (!snap.exists()) return null
   return { id: snap.id, ...snap.data() } as T
 }
