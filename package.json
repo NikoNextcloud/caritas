@@ -1,23 +1,30 @@
 {
-  "name": "caritas-portal",
+  "name": "caritas-admin",
+  "version": "1.0.0",
   "private": true,
-  "version": "0.0.0",
-  "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "preview": "vite preview"
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start"
   },
   "dependencies": {
-    "firebase": "^10.7.1",
+    "next": "14.2.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "react-router-dom": "^6.20.1"
+    "firebase": "^10.12.0",
+    "react-firebase-hooks": "^5.1.1",
+    "date-fns": "^3.6.0",
+    "react-hot-toast": "^2.4.1",
+    "lucide-react": "^0.383.0",
+    "@tanstack/react-table": "^8.17.3"
   },
   "devDependencies": {
-    "@types/react": "^18.2.43",
-    "@types/react-dom": "^18.2.17",
-    "@vitejs/plugin-react": "^4.2.1",
-    "vite": "^5.0.8"
+    "typescript": "^5",
+    "@types/node": "^20",
+    "@types/react": "^18",
+    "@types/react-dom": "^18",
+    "tailwindcss": "^3.4.1",
+    "postcss": "^8",
+    "autoprefixer": "^10.0.1"
   }
 }

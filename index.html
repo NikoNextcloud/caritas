@@ -1,13 +1,1463 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="bg">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Административен панел</title>
-    <link rel="icon" type="image/svg+xml" href="/caritas-logo.svg" />
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.jsx"></script>
-  </body>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Каритас Админ</title>
+<style>
+:root {
+  --bg: #0f1117;
+  --surface: #1a1d27;
+  --surface2: #21253a;
+  --border: #2a2f45;
+  --accent: #3b6fd4;
+  --accent2: #5b8af0;
+  --green: #22c55e;
+  --yellow: #f59e0b;
+  --red: #ef4444;
+  --text: #e2e8f0;
+  --text2: #94a3b8;
+  --text3: #64748b;
+  --sidebar-w: 240px;
+  --font: 'Segoe UI', system-ui, sans-serif;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: var(--font);
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  display: flex;
+}
+
+/* ── SIDEBAR ── */
+.sidebar {
+  width: var(--sidebar-w);
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  position: fixed;
+  top: 0; left: 0; bottom: 0;
+  z-index: 100;
+  transition: transform 0.25s;
+}
+
+.sidebar-logo {
+  padding: 20px 20px 16px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.sidebar-logo .logo-icon {
+  width: 36px; height: 36px;
+  background: var(--accent);
+  border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 18px; font-weight: 800; color: #fff;
+}
+.sidebar-logo span { font-size: 17px; font-weight: 700; color: var(--text); }
+
+.sidebar-user {
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.avatar {
+  width: 34px; height: 34px;
+  background: linear-gradient(135deg, #3b6fd4, #8b5cf6);
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 13px; font-weight: 700; color: #fff;
+  flex-shrink: 0;
+}
+.user-info { flex: 1; min-width: 0; }
+.user-name { font-size: 13px; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.user-status { display: flex; align-items: center; gap: 5px; font-size: 11px; color: var(--green); }
+.user-status::before { content: ''; width: 6px; height: 6px; background: var(--green); border-radius: 50%; }
+
+.sidebar-section { padding: 16px 12px 4px; font-size: 10px; font-weight: 700; color: var(--text3); text-transform: uppercase; letter-spacing: 0.08em; }
+
+.nav-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 14px;
+  margin: 1px 8px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 13.5px;
+  color: var(--text2);
+  transition: all 0.15s;
+  border: none; background: none; width: calc(100% - 16px); text-align: left;
+}
+.nav-item:hover { background: var(--surface2); color: var(--text); }
+.nav-item.active { background: rgba(59,111,212,0.18); color: var(--accent2); font-weight: 600; }
+.nav-item svg { width: 16px; height: 16px; flex-shrink: 0; opacity: 0.7; }
+.nav-item.active svg { opacity: 1; }
+
+.sidebar-footer {
+  margin-top: auto;
+  padding: 12px 8px;
+  border-top: 1px solid var(--border);
+}
+
+/* ── TOPBAR ── */
+.layout { margin-left: var(--sidebar-w); flex: 1; display: flex; flex-direction: column; min-height: 100vh; }
+
+.topbar {
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  padding: 0 24px;
+  height: 56px;
+  display: flex; align-items: center; justify-content: space-between;
+  position: sticky; top: 0; z-index: 90;
+}
+.topbar-left { display: flex; align-items: center; gap: 12px; }
+.breadcrumb { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text3); }
+.breadcrumb span { color: var(--text2); }
+.breadcrumb .sep { color: var(--text3); }
+.breadcrumb .cur { color: var(--text); font-weight: 500; }
+
+.topbar-right { display: flex; align-items: center; gap: 10px; }
+
+.notif-btn {
+  position: relative;
+  width: 36px; height: 36px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface2);
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  color: var(--text2);
+  transition: all 0.15s;
+}
+.notif-btn:hover { border-color: var(--accent); color: var(--accent2); }
+.notif-badge {
+  position: absolute; top: -4px; right: -4px;
+  background: var(--red); color: #fff;
+  font-size: 10px; font-weight: 700;
+  width: 17px; height: 17px;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  border: 2px solid var(--surface);
+}
+
+/* ── MAIN ── */
+.main { flex: 1; padding: 24px; }
+
+.page-header {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  margin-bottom: 22px;
+}
+.page-title h1 { font-size: 22px; font-weight: 700; color: var(--text); }
+.page-title p { font-size: 13px; color: var(--text3); margin-top: 3px; }
+
+.actions { display: flex; gap: 8px; align-items: center; }
+
+/* ── BUTTONS ── */
+.btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 8px 14px;
+  border-radius: 8px;
+  font-size: 13px; font-weight: 500;
+  border: none; cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+.btn-primary { background: var(--accent); color: #fff; }
+.btn-primary:hover { background: var(--accent2); }
+.btn-ghost { background: var(--surface2); color: var(--text2); border: 1px solid var(--border); }
+.btn-ghost:hover { border-color: var(--accent); color: var(--text); }
+.btn-danger { background: rgba(239,68,68,0.15); color: var(--red); border: 1px solid rgba(239,68,68,0.3); }
+.btn-danger:hover { background: rgba(239,68,68,0.25); }
+.btn-sm { padding: 5px 10px; font-size: 12px; }
+.btn-icon { padding: 7px; border-radius: 7px; }
+
+/* ── STATS CARDS ── */
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 14px;
+  margin-bottom: 22px;
+}
+.stat-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 18px 20px;
+}
+.stat-label { font-size: 12px; color: var(--text3); font-weight: 500; margin-bottom: 8px; }
+.stat-value { font-size: 28px; font-weight: 800; color: var(--text); line-height: 1; }
+.stat-sub { font-size: 12px; color: var(--text3); margin-top: 6px; }
+.stat-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 4px; }
+
+/* ── SEARCH BAR ── */
+.search-bar {
+  display: flex; gap: 8px;
+  margin-bottom: 16px;
+}
+.search-input-wrap {
+  position: relative; flex: 1;
+}
+.search-input-wrap svg {
+  position: absolute; left: 11px; top: 50%; transform: translateY(-50%);
+  color: var(--text3); width: 15px; height: 15px;
+}
+.search-input {
+  width: 100%; padding: 9px 12px 9px 34px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  font-size: 13.5px;
+  outline: none;
+  transition: border-color 0.15s;
+}
+.search-input:focus { border-color: var(--accent); }
+.search-input::placeholder { color: var(--text3); }
+
+/* ── TABLE ── */
+.table-wrap {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.table th {
+  background: var(--surface2);
+  padding: 11px 14px;
+  text-align: left;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text3);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+.table td {
+  padding: 12px 14px;
+  border-bottom: 1px solid rgba(42,47,69,0.5);
+  color: var(--text2);
+  vertical-align: top;
+}
+.table tr:last-child td { border-bottom: none; }
+.table tr:hover td { background: rgba(255,255,255,0.02); }
+
+.table td .cell-main { color: var(--text); font-weight: 500; margin-bottom: 2px; }
+.table td .cell-sub { color: var(--text3); font-size: 12px; }
+.table td .cell-long { max-width: 280px; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+
+/* STATUS BADGES */
+.badge {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 3px 9px;
+  border-radius: 20px;
+  font-size: 11px; font-weight: 600;
+  white-space: nowrap;
+}
+.badge::before { content: ''; width: 5px; height: 5px; border-radius: 50%; }
+.badge-green { background: rgba(34,197,94,0.12); color: var(--green); }
+.badge-green::before { background: var(--green); }
+.badge-yellow { background: rgba(245,158,11,0.12); color: var(--yellow); }
+.badge-yellow::before { background: var(--yellow); }
+.badge-red { background: rgba(239,68,68,0.12); color: var(--red); }
+.badge-red::before { background: var(--red); }
+.badge-blue { background: rgba(59,111,212,0.15); color: var(--accent2); }
+.badge-blue::before { background: var(--accent2); }
+
+/* ── CHECKBOX ── */
+input[type=checkbox] {
+  width: 15px; height: 15px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+/* ── PAGINATION ── */
+.pagination {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 18px;
+  border-top: 1px solid var(--border);
+}
+.pag-info { font-size: 12px; color: var(--text3); }
+.pag-btns { display: flex; gap: 4px; }
+.pag-btn {
+  width: 30px; height: 30px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--surface2);
+  color: var(--text2);
+  font-size: 12px;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: all 0.15s;
+}
+.pag-btn:hover { border-color: var(--accent); color: var(--accent2); }
+.pag-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+.pag-btn:disabled { opacity: 0.4; cursor: default; }
+
+/* ── MODAL ── */
+.modal-overlay {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.65);
+  backdrop-filter: blur(3px);
+  z-index: 1000;
+  display: flex; align-items: center; justify-content: center;
+  opacity: 0; pointer-events: none;
+  transition: opacity 0.2s;
+}
+.modal-overlay.open { opacity: 1; pointer-events: all; }
+.modal {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  width: 600px; max-width: 95vw;
+  max-height: 85vh;
+  display: flex; flex-direction: column;
+  transform: translateY(20px);
+  transition: transform 0.2s;
+}
+.modal-overlay.open .modal { transform: translateY(0); }
+.modal-header {
+  padding: 20px 24px 16px;
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: space-between;
+}
+.modal-title { font-size: 16px; font-weight: 700; color: var(--text); }
+.modal-close {
+  width: 28px; height: 28px; border-radius: 6px;
+  border: 1px solid var(--border); background: var(--surface2);
+  color: var(--text2); cursor: pointer; font-size: 16px;
+  display: flex; align-items: center; justify-content: center;
+  transition: all 0.15s;
+}
+.modal-close:hover { border-color: var(--red); color: var(--red); }
+.modal-body { padding: 20px 24px; overflow-y: auto; flex: 1; }
+.modal-footer {
+  padding: 14px 24px;
+  border-top: 1px solid var(--border);
+  display: flex; justify-content: flex-end; gap: 8px;
+}
+
+/* ── FORM ── */
+.form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.form-full { grid-column: 1 / -1; }
+.form-group { display: flex; flex-direction: column; gap: 5px; }
+.form-label { font-size: 12px; font-weight: 600; color: var(--text2); }
+.form-control {
+  padding: 9px 12px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  font-size: 13px;
+  outline: none;
+  transition: border-color 0.15s;
+  font-family: var(--font);
+}
+.form-control:focus { border-color: var(--accent); }
+.form-control::placeholder { color: var(--text3); }
+select.form-control { cursor: pointer; }
+textarea.form-control { resize: vertical; min-height: 80px; }
+
+/* ── CASE TABS ── */
+.case-tabs {
+  display: flex; gap: 0;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 16px;
+  margin-top: 8px;
+  overflow-x: auto;
+}
+.case-tab {
+  padding: 8px 16px;
+  font-size: 12px; font-weight: 600;
+  color: var(--text3);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+.case-tab:hover { color: var(--text2); }
+.case-tab.active { color: var(--accent2); border-bottom-color: var(--accent); }
+.case-panel { display: none; }
+.case-panel.active { display: block; }
+
+/* ── DASHBOARD ── */
+.dash-grid { display: grid; grid-template-columns: 2fr 1fr; gap: 16px; margin-top: 16px; }
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 18px 20px;
+}
+.card-title { font-size: 14px; font-weight: 700; color: var(--text); margin-bottom: 14px; }
+.activity-item {
+  display: flex; gap: 12px; padding: 10px 0;
+  border-bottom: 1px solid rgba(42,47,69,0.5);
+}
+.activity-item:last-child { border-bottom: none; }
+.activity-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--accent); margin-top: 5px; flex-shrink: 0;
+}
+.activity-text { font-size: 13px; color: var(--text2); line-height: 1.5; }
+.activity-time { font-size: 11px; color: var(--text3); margin-top: 2px; }
+
+.quick-stat {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 11px 0;
+  border-bottom: 1px solid rgba(42,47,69,0.5);
+}
+.quick-stat:last-child { border-bottom: none; }
+.qs-label { font-size: 13px; color: var(--text2); }
+.qs-val { font-size: 15px; font-weight: 700; color: var(--text); }
+
+/* ── TASKS ── */
+.task-item {
+  display: flex; align-items: flex-start; gap: 12px;
+  padding: 12px 0;
+  border-bottom: 1px solid rgba(42,47,69,0.5);
+}
+.task-item:last-child { border-bottom: none; }
+.task-check { margin-top: 2px; }
+.task-content { flex: 1; }
+.task-title { font-size: 13.5px; color: var(--text); font-weight: 500; }
+.task-meta { font-size: 12px; color: var(--text3); margin-top: 3px; }
+.task-done .task-title { text-decoration: line-through; color: var(--text3); }
+
+/* ── PAGES HIDDEN ── */
+.page { display: none; }
+.page.active { display: block; }
+
+/* ── NOTIF DROPDOWN ── */
+.notif-dropdown {
+  position: absolute; top: 46px; right: 0;
+  width: 320px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+  z-index: 200;
+  display: none;
+}
+.notif-dropdown.open { display: block; }
+.notif-head { padding: 14px 16px; border-bottom: 1px solid var(--border); font-size: 13px; font-weight: 700; color: var(--text); display: flex; justify-content: space-between; }
+.notif-head span { font-size: 11px; font-weight: 500; color: var(--accent2); cursor: pointer; }
+.notif-item { padding: 12px 16px; border-bottom: 1px solid rgba(42,47,69,0.5); cursor: pointer; transition: background 0.1s; }
+.notif-item:hover { background: var(--surface2); }
+.notif-item:last-child { border-bottom: none; }
+.notif-text { font-size: 12.5px; color: var(--text2); line-height: 1.5; }
+.notif-time { font-size: 11px; color: var(--text3); margin-top: 3px; }
+.notif-unread { background: rgba(59,111,212,0.06); }
+
+.topbar-notif { position: relative; }
+
+/* ── EMPTY STATE ── */
+.empty { text-align: center; padding: 48px 20px; color: var(--text3); }
+.empty svg { width: 40px; height: 40px; margin-bottom: 12px; opacity: 0.3; }
+.empty p { font-size: 14px; }
+
+/* ── TOAST ── */
+.toast {
+  position: fixed; bottom: 24px; right: 24px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px 16px;
+  display: flex; align-items: center; gap: 10px;
+  font-size: 13px; color: var(--text);
+  box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+  transform: translateY(80px); opacity: 0;
+  transition: all 0.3s;
+  z-index: 9999;
+  min-width: 240px;
+}
+.toast.show { transform: translateY(0); opacity: 1; }
+.toast-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+
+/* Responsive */
+@media (max-width: 900px) {
+  .stats-grid { grid-template-columns: repeat(2,1fr); }
+  .dash-grid { grid-template-columns: 1fr; }
+}
+@media (max-width: 640px) {
+  :root { --sidebar-w: 0px; }
+  .sidebar { transform: translateX(-240px); }
+  .sidebar.open { transform: translateX(0); --sidebar-w: 240px; }
+  .stats-grid { grid-template-columns: 1fr 1fr; }
+}
+</style>
+</head>
+<body>
+
+<!-- SIDEBAR -->
+<aside class="sidebar" id="sidebar">
+  <div class="sidebar-logo">
+    <div class="logo-icon">C</div>
+    <span>Каритас</span>
+  </div>
+  <div class="sidebar-user">
+    <div class="avatar">НТ</div>
+    <div class="user-info">
+      <div class="user-name">Никол Траянова</div>
+      <div class="user-status">Онлайн</div>
+    </div>
+  </div>
+
+  <div class="sidebar-section">Администрация</div>
+
+  <button class="nav-item active" onclick="showPage('dashboard',this)">
+    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1" stroke-width="2"/><rect x="14" y="3" width="7" height="7" rx="1" stroke-width="2"/><rect x="3" y="14" width="7" height="7" rx="1" stroke-width="2"/><rect x="14" y="14" width="7" height="7" rx="1" stroke-width="2"/></svg>
+    Основно табло
+  </button>
+
+  <button class="nav-item" onclick="showPage('tasks',this)">
+    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg>
+    Списък Задачи
+  </button>
+
+  <button class="nav-item" onclick="showPage('beneficiaries',this)">
+    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+    Бенефициенти
+  </button>
+
+  <button class="nav-item" onclick="showPage('requests',this)">
+    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+    Заявки за Дейности
+  </button>
+
+  <button class="nav-item" onclick="showPage('employers',this)">
+    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/></svg>
+    Работодатели
+  </button>
+
+  <div class="sidebar-section">Справки</div>
+
+  <button class="nav-item" onclick="showPage('export',this)">
+    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+    Export
+  </button>
+
+  <button class="nav-item" onclick="showPage('epay',this)">
+    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"/></svg>
+    Export EPAY
+  </button>
+
+  <div class="sidebar-section" style="margin-top:auto">Потребител</div>
+
+  <div class="sidebar-footer">
+    <button class="nav-item" onclick="showToast('Излизане...','#ef4444')">
+      <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
+      Изход
+    </button>
+  </div>
+</aside>
+
+<!-- MAIN LAYOUT -->
+<div class="layout">
+  <!-- TOPBAR -->
+  <header class="topbar">
+    <div class="topbar-left">
+      <div class="breadcrumb" id="breadcrumb">
+        <span>Начало</span>
+        <span class="sep">›</span>
+        <span class="cur" id="breadcrumb-cur">Основно табло</span>
+      </div>
+    </div>
+    <div class="topbar-right">
+      <div class="topbar-notif">
+        <button class="notif-btn" onclick="toggleNotif()" title="Нотификации">
+          <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>
+          <span class="notif-badge" id="notif-count">5</span>
+        </button>
+        <div class="notif-dropdown" id="notif-dropdown">
+          <div class="notif-head">Нотификации <span onclick="markAllRead()">Маркирай всички</span></div>
+          <div id="notif-list">
+            <div class="notif-item notif-unread" onclick="openRequest(14154)">
+              <div class="notif-text">Нова заявка #14154 — Тетяна Авраменко</div>
+              <div class="notif-time">преди 5 мин</div>
+            </div>
+            <div class="notif-item notif-unread" onclick="openRequest(14233)">
+              <div class="notif-text">Заявка #14233 е обновена</div>
+              <div class="notif-time">преди 12 мин</div>
+            </div>
+            <div class="notif-item notif-unread" onclick="openRequest(14253)">
+              <div class="notif-text">Нова заявка #14253 — Зора Методиева</div>
+              <div class="notif-time">преди 28 мин</div>
+            </div>
+            <div class="notif-item" onclick="openRequest(13921)">
+              <div class="notif-text">Заявка #13921 е потвърдена</div>
+              <div class="notif-time">преди 1 час</div>
+            </div>
+            <div class="notif-item" onclick="openRequest(14254)">
+              <div class="notif-text">Заявка #14254 — нов коментар</div>
+              <div class="notif-time">преди 2 часа</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- ═══════════════ PAGE: DASHBOARD ═══════════════ -->
+  <main class="main">
+    <div class="page active" id="page-dashboard">
+      <div class="page-header">
+        <div class="page-title">
+          <h1>Основно табло</h1>
+          <p>Добре дошла, Никол — ето обобщение на дейностите днес</p>
+        </div>
+        <div class="actions">
+          <button class="btn btn-ghost btn-sm" onclick="showToast('Данните са опреснени','#22c55e')">
+            <svg width="13" height="13" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+            Опресни
+          </button>
+        </div>
+      </div>
+
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="stat-label">Активни заявки</div>
+          <div class="stat-value">696</div>
+          <div class="stat-sub"><span class="stat-dot" style="background:var(--green)"></span>+12 тази седмица</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Бенефициенти</div>
+          <div class="stat-value">284</div>
+          <div class="stat-sub"><span class="stat-dot" style="background:var(--accent2)"></span>+3 нови</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Задачи за днес</div>
+          <div class="stat-value">8</div>
+          <div class="stat-sub"><span class="stat-dot" style="background:var(--yellow)"></span>3 спешни</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Работодатели</div>
+          <div class="stat-value">47</div>
+          <div class="stat-sub"><span class="stat-dot" style="background:var(--green)"></span>Активни партньори</div>
+        </div>
+      </div>
+
+      <div class="dash-grid">
+        <div class="card">
+          <div class="card-title">Последни дейности</div>
+          <div class="activity-item">
+            <div class="activity-dot"></div>
+            <div>
+              <div class="activity-text">Тетяна Авраменко — Проведена консултация (ХКЦ Пловдив)</div>
+              <div class="activity-time">18.09.2026 · Таня</div>
+            </div>
+          </div>
+          <div class="activity-item">
+            <div class="activity-dot" style="background:var(--green)"></div>
+            <div>
+              <div class="activity-text">Зора Методиева — Кандидатстване към АББ България</div>
+              <div class="activity-time">15.09.2026 · Анастасия</div>
+            </div>
+          </div>
+          <div class="activity-item">
+            <div class="activity-dot" style="background:var(--yellow)"></div>
+            <div>
+              <div class="activity-text">Тетяна Ходорчук — Съдействие за банкова сметка в Алианц</div>
+              <div class="activity-time">11.09.2026 · Таня</div>
+            </div>
+          </div>
+          <div class="activity-item">
+            <div class="activity-dot" style="background:var(--accent2)"></div>
+            <div>
+              <div class="activity-text">Алина Йовчева — Започна работа в МОМ като Социален медиатор</div>
+              <div class="activity-time">01.09.2026 · Таня</div>
+            </div>
+          </div>
+          <div class="activity-item">
+            <div class="activity-dot" style="background:var(--green)"></div>
+            <div>
+              <div class="activity-text">Емилия Методиева — Кандидатстване към фирма Верди М</div>
+              <div class="activity-time">11.09.2026 · Анастасия</div>
+            </div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-title">Статистика по статус</div>
+          <div class="quick-stat">
+            <div class="qs-label">✅ Потвърдено</div>
+            <div class="qs-val" style="color:var(--green)">542</div>
+          </div>
+          <div class="quick-stat">
+            <div class="qs-label">⏳ Чакащ</div>
+            <div class="qs-val" style="color:var(--yellow)">98</div>
+          </div>
+          <div class="quick-stat">
+            <div class="qs-label">✖ Отхвърлено</div>
+            <div class="qs-val" style="color:var(--red)">24</div>
+          </div>
+          <div class="quick-stat">
+            <div class="qs-label">🏁 Приключено</div>
+            <div class="qs-val" style="color:var(--text3)">32</div>
+          </div>
+          <br>
+          <div class="card-title">Дейности по тип</div>
+          <div class="quick-stat">
+            <div class="qs-label">Кариерен център</div>
+            <div class="qs-val">411</div>
+          </div>
+          <div class="quick-stat">
+            <div class="qs-label">Социална медиация</div>
+            <div class="qs-val">198</div>
+          </div>
+          <div class="quick-stat">
+            <div class="qs-label">Управление на случай</div>
+            <div class="qs-val">87</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════════════ PAGE: TASKS ═══════════════ -->
+    <div class="page" id="page-tasks">
+      <div class="page-header">
+        <div class="page-title">
+          <h1>Списък Задачи</h1>
+          <p>Управление на текущи задачи</p>
+        </div>
+        <div class="actions">
+          <button class="btn btn-primary" onclick="openAddTask()">
+            <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+            Добави задача
+          </button>
+        </div>
+      </div>
+      <div class="stats-grid" style="grid-template-columns:repeat(3,1fr)">
+        <div class="stat-card"><div class="stat-label">Общо задачи</div><div class="stat-value">8</div></div>
+        <div class="stat-card"><div class="stat-label">Завършени</div><div class="stat-value" style="color:var(--green)">3</div></div>
+        <div class="stat-card"><div class="stat-label">Чакащи</div><div class="stat-value" style="color:var(--yellow)">5</div></div>
+      </div>
+      <div class="table-wrap">
+        <div style="padding:14px 18px; border-bottom:1px solid var(--border)">
+          <div class="search-bar" style="margin:0">
+            <div class="search-input-wrap">
+              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8" stroke-width="2"/><path stroke-width="2" d="M21 21l-4.35-4.35"/></svg>
+              <input class="search-input" placeholder="Търси задача..." oninput="filterTasks(this.value)">
+            </div>
+          </div>
+        </div>
+        <div style="padding:8px 18px 18px" id="tasks-list">
+          <div class="task-item" data-task="Контакт с Тетяна Авраменко за актуализация">
+            <div class="task-check"><input type="checkbox" onchange="toggleTask(this)"></div>
+            <div class="task-content">
+              <div class="task-title">Контакт с Тетяна Авраменко за актуализация</div>
+              <div class="task-meta">ХКЦ Пловдив · Краен срок: 20.09.2026 <span class="badge badge-red" style="margin-left:6px">Спешна</span></div>
+            </div>
+          </div>
+          <div class="task-item" data-task="Изпрати документи на Анастасия">
+            <div class="task-check"><input type="checkbox" onchange="toggleTask(this)"></div>
+            <div class="task-content">
+              <div class="task-title">Изпрати документи на Анастасия</div>
+              <div class="task-meta">АББ България · Краен срок: 22.09.2026 <span class="badge badge-yellow" style="margin-left:6px">Нормална</span></div>
+            </div>
+          </div>
+          <div class="task-item" data-task="Проверка на банкови сметки — Кира Лаптий">
+            <div class="task-check"><input type="checkbox" onchange="toggleTask(this)"></div>
+            <div class="task-content">
+              <div class="task-title">Проверка на банкови сметки — Кира Лаптий</div>
+              <div class="task-meta">Алианц Банка · Краен срок: 19.09.2026 <span class="badge badge-red" style="margin-left:6px">Спешна</span></div>
+            </div>
+          </div>
+          <div class="task-item" data-task="Насрочи среща с Работодател МОМ">
+            <div class="task-check"><input type="checkbox" onchange="toggleTask(this)"></div>
+            <div class="task-content">
+              <div class="task-title">Насрочи среща с Работодател МОМ</div>
+              <div class="task-meta">Работодател · Краен срок: 25.09.2026 <span class="badge badge-blue" style="margin-left:6px">Планирана</span></div>
+            </div>
+          </div>
+          <div class="task-item" data-task="Изготви месечен отчет за септември">
+            <div class="task-check"><input type="checkbox" onchange="toggleTask(this)"></div>
+            <div class="task-content">
+              <div class="task-title">Изготви месечен отчет за септември</div>
+              <div class="task-meta">Отчет · Краен срок: 30.09.2026 <span class="badge badge-yellow" style="margin-left:6px">Нормална</span></div>
+            </div>
+          </div>
+          <div class="task-item task-done" data-task="Разговор с Асен Ангелов">
+            <div class="task-check"><input type="checkbox" checked onchange="toggleTask(this)"></div>
+            <div class="task-content">
+              <div class="task-title">Разговор с Асен Ангелов</div>
+              <div class="task-meta">Завършена на: 17.09.2026</div>
+            </div>
+          </div>
+          <div class="task-item task-done" data-task="Export на данни за август">
+            <div class="task-check"><input type="checkbox" checked onchange="toggleTask(this)"></div>
+            <div class="task-content">
+              <div class="task-title">Export на данни за август</div>
+              <div class="task-meta">Завършена на: 15.09.2026</div>
+            </div>
+          </div>
+          <div class="task-item task-done" data-task="Обновяване на профили на Работодатели">
+            <div class="task-check"><input type="checkbox" checked onchange="toggleTask(this)"></div>
+            <div class="task-content">
+              <div class="task-title">Обновяване на профили на Работодатели</div>
+              <div class="task-meta">Завършена на: 14.09.2026</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════════════ PAGE: BENEFICIARIES ═══════════════ -->
+    <div class="page" id="page-beneficiaries">
+      <div class="page-header">
+        <div class="page-title">
+          <h1>Бенефициенти</h1>
+          <p>Управление на бенефициенти</p>
+        </div>
+        <div class="actions">
+          <button class="btn btn-ghost btn-sm" onclick="showToast('Export стартиран...','#3b6fd4')">
+            <svg width="13" height="13" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3M3 17V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z"/></svg>
+            Export
+          </button>
+          <button class="btn btn-primary" onclick="openAddBeneficiary()">
+            <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+            Добави
+          </button>
+        </div>
+      </div>
+      <div class="search-bar">
+        <div class="search-input-wrap">
+          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8" stroke-width="2"/><path stroke-width="2" d="M21 21l-4.35-4.35"/></svg>
+          <input class="search-input" placeholder="Търси по имe, локация..." oninput="filterTable('ben-table',this.value)">
+        </div>
+        <button class="btn btn-ghost">
+          <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"/></svg>
+          Филтри
+        </button>
+      </div>
+      <div class="table-wrap">
+        <table class="table" id="ben-table">
+          <thead>
+            <tr>
+              <th><input type="checkbox" onchange="selectAll(this,'ben-table')"></th>
+              <th>ID</th>
+              <th>Имена</th>
+              <th>Локация</th>
+              <th>Дейности</th>
+              <th>Статус</th>
+              <th>Служител</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td><input type="checkbox"></td><td>B001</td><td><div class="cell-main">Тетяна Авраменко</div></td><td>Пловдив</td><td>3</td><td><span class="badge badge-green">Активен</span></td><td>Таня</td><td><button class="btn btn-ghost btn-sm btn-icon" onclick="openEditBeneficiary('Тетяна Авраменко')">✏️</button></td></tr>
+            <tr><td><input type="checkbox"></td><td>B002</td><td><div class="cell-main">Зора Методиева</div></td><td>Пловдив</td><td>5</td><td><span class="badge badge-green">Активен</span></td><td>Анастасия</td><td><button class="btn btn-ghost btn-sm btn-icon" onclick="openEditBeneficiary('Зора Методиева')">✏️</button></td></tr>
+            <tr><td><input type="checkbox"></td><td>B003</td><td><div class="cell-main">Олександр Малцев</div></td><td>Пловдив</td><td>2</td><td><span class="badge badge-yellow">Чакащ</span></td><td>Таня</td><td><button class="btn btn-ghost btn-sm btn-icon" onclick="openEditBeneficiary('Олександр Малцев')">✏️</button></td></tr>
+            <tr><td><input type="checkbox"></td><td>B004</td><td><div class="cell-main">Тетяна Ходорчук</div></td><td>Пловдив</td><td>1</td><td><span class="badge badge-green">Активен</span></td><td>Таня</td><td><button class="btn btn-ghost btn-sm btn-icon" onclick="openEditBeneficiary('Тетяна Ходорчук')">✏️</button></td></tr>
+            <tr><td><input type="checkbox"></td><td>B005</td><td><div class="cell-main">Кира Лаптий</div></td><td>Пловдив</td><td>1</td><td><span class="badge badge-green">Активен</span></td><td>Таня</td><td><button class="btn btn-ghost btn-sm btn-icon" onclick="openEditBeneficiary('Кира Лаптий')">✏️</button></td></tr>
+            <tr><td><input type="checkbox"></td><td>B006</td><td><div class="cell-main">Алина Йовчева</div></td><td>Пловдив</td><td>4</td><td><span class="badge badge-blue">Приключен</span></td><td>Таня</td><td><button class="btn btn-ghost btn-sm btn-icon" onclick="openEditBeneficiary('Алина Йовчева')">✏️</button></td></tr>
+            <tr><td><input type="checkbox"></td><td>B007</td><td><div class="cell-main">Юлия Беркута</div></td><td>Пловдив</td><td>2</td><td><span class="badge badge-green">Активен</span></td><td>Таня</td><td><button class="btn btn-ghost btn-sm btn-icon" onclick="openEditBeneficiary('Юлия Беркута')">✏️</button></td></tr>
+            <tr><td><input type="checkbox"></td><td>B008</td><td><div class="cell-main">Тимур Марченко</div></td><td>Пловдив</td><td>2</td><td><span class="badge badge-yellow">Чакащ</span></td><td>Таня</td><td><button class="btn btn-ghost btn-sm btn-icon" onclick="openEditBeneficiary('Тимур Марченко')">✏️</button></td></tr>
+            <tr><td><input type="checkbox"></td><td>B009</td><td><div class="cell-main">Емилия Методиева</div></td><td>Пловдив</td><td>3</td><td><span class="badge badge-green">Активен</span></td><td>Анастасия</td><td><button class="btn btn-ghost btn-sm btn-icon" onclick="openEditBeneficiary('Емилия Методиева')">✏️</button></td></tr>
+            <tr><td><input type="checkbox"></td><td>B010</td><td><div class="cell-main">Асен Ангелов</div></td><td>Пловдив</td><td>2</td><td><span class="badge badge-green">Активен</span></td><td>Николета</td><td><button class="btn btn-ghost btn-sm btn-icon" onclick="openEditBeneficiary('Асен Ангелов')">✏️</button></td></tr>
+          </tbody>
+        </table>
+        <div class="pagination">
+          <span class="pag-info">Показани 10 от 284 записа</span>
+          <div class="pag-btns">
+            <button class="pag-btn" disabled>‹</button>
+            <button class="pag-btn active">1</button>
+            <button class="pag-btn">2</button>
+            <button class="pag-btn">3</button>
+            <button class="pag-btn">›</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════════════ PAGE: REQUESTS ═══════════════ -->
+    <div class="page" id="page-requests">
+      <div class="page-header">
+        <div class="page-title">
+          <h1>Бенефициенти Заявки За Дейности</h1>
+          <p>Бенефициенти заявки за дейности</p>
+        </div>
+        <div class="actions">
+          <button class="btn btn-ghost btn-sm btn-icon" onclick="confirmDelete()" title="Изтрий избраните">
+            <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+          </button>
+          <button class="btn btn-ghost btn-sm btn-icon" onclick="openSearchModal()" title="Търсене">
+            <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8" stroke-width="2"/><path stroke-width="2" d="M21 21l-4.35-4.35"/></svg>
+          </button>
+          <button class="btn btn-primary" onclick="openAddRequest()">
+            <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+            Добави
+          </button>
+        </div>
+      </div>
+      <div class="search-bar">
+        <div class="search-input-wrap">
+          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8" stroke-width="2"/><path stroke-width="2" d="M21 21l-4.35-4.35"/></svg>
+          <input class="search-input" placeholder="Търси в полето: Id" oninput="filterTable('req-table',this.value)">
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table class="table" id="req-table">
+          <thead>
+            <tr>
+              <th><input type="checkbox" onchange="selectAll(this,'req-table')"></th>
+              <th></th>
+              <th>Id</th>
+              <th>Дейност</th>
+              <th>Съобщение</th>
+              <th>Case 1</th>
+              <th>Case 2</th>
+              <th>Статус</th>
+              <th>Бенефициент</th>
+            </tr>
+          </thead>
+          <tbody id="req-tbody">
+          </tbody>
+        </table>
+        <div class="pagination">
+          <span class="pag-info">Показани 20 от 13 897 записа (696 стр.)</span>
+          <div class="pag-btns">
+            <button class="pag-btn" disabled>‹</button>
+            <button class="pag-btn active">1</button>
+            <button class="pag-btn">2</button>
+            <button class="pag-btn">3</button>
+            <span style="color:var(--text3);font-size:12px;padding:0 4px">...</span>
+            <button class="pag-btn">695</button>
+            <button class="pag-btn">696</button>
+            <button class="pag-btn">›</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════════════ PAGE: EMPLOYERS ═══════════════ -->
+    <div class="page" id="page-employers">
+      <div class="page-header">
+        <div class="page-title">
+          <h1>Работодатели</h1>
+          <p>Партньорски организации и работодатели</p>
+        </div>
+        <div class="actions">
+          <button class="btn btn-primary" onclick="openAddEmployer()">
+            <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+            Добави работодател
+          </button>
+        </div>
+      </div>
+      <div class="search-bar">
+        <div class="search-input-wrap">
+          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8" stroke-width="2"/><path stroke-width="2" d="M21 21l-4.35-4.35"/></svg>
+          <input class="search-input" placeholder="Търси работодател..." oninput="filterTable('emp-table',this.value)">
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table class="table" id="emp-table">
+          <thead>
+            <tr>
+              <th><input type="checkbox"></th>
+              <th>ID</th>
+              <th>Организация</th>
+              <th>Сектор</th>
+              <th>Град</th>
+              <th>Бенефициенти</th>
+              <th>Статус</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td><input type="checkbox"></td><td>E001</td><td><div class="cell-main">МОМ България</div><div class="cell-sub">Международна организация</div></td><td>НПО</td><td>Пловдив</td><td>12</td><td><span class="badge badge-green">Активен</span></td><td><button class="btn btn-ghost btn-sm btn-icon" onclick="openEditEmployer('МОМ България')">✏️</button></td></tr>
+            <tr><td><input type="checkbox"></td><td>E002</td><td><div class="cell-main">АББ България ЕООД</div><div class="cell-sub">Финансов сектор</div></td><td>Частен</td><td>Пловдив</td><td>8</td><td><span class="badge badge-green">Активен</span></td><td><button class="btn btn-ghost btn-sm btn-icon" onclick="openEditEmployer('АББ България ЕООД')">✏️</button></td></tr>
+            <tr><td><input type="checkbox"></td><td>E003</td><td><div class="cell-main">Алианц Банка</div><div class="cell-sub">Финансов сектор</div></td><td>Частен</td><td>Пловдив</td><td>5</td><td><span class="badge badge-green">Активен</span></td><td><button class="btn btn-ghost btn-sm btn-icon" onclick="openEditEmployer('Алианц Банка')">✏️</button></td></tr>
+            <tr><td><input type="checkbox"></td><td>E004</td><td><div class="cell-main">Джъмбо ЕС.Б ЕООД</div><div class="cell-sub">Търговия</div></td><td>Частен</td><td>Пловдив</td><td>3</td><td><span class="badge badge-yellow">Неактивен</span></td><td><button class="btn btn-ghost btn-sm btn-icon" onclick="openEditEmployer('Джъмбо ЕС.Б ЕООД')">✏️</button></td></tr>
+            <tr><td><input type="checkbox"></td><td>E005</td><td><div class="cell-main">Верди М ЕООД</div><div class="cell-sub">Услуги</div></td><td>Частен</td><td>Пловдив</td><td>2</td><td><span class="badge badge-green">Активен</span></td><td><button class="btn btn-ghost btn-sm btn-icon" onclick="openEditEmployer('Верди М ЕООД')">✏️</button></td></tr>
+            <tr><td><input type="checkbox"></td><td>E006</td><td><div class="cell-main">Латекоер България</div><div class="cell-sub">Производство</div></td><td>Частен</td><td>Пловдив</td><td>7</td><td><span class="badge badge-green">Активен</span></td><td><button class="btn btn-ghost btn-sm btn-icon" onclick="openEditEmployer('Латекоер България')">✏️</button></td></tr>
+          </tbody>
+        </table>
+        <div class="pagination">
+          <span class="pag-info">Показани 6 от 47 записа</span>
+          <div class="pag-btns">
+            <button class="pag-btn" disabled>‹</button>
+            <button class="pag-btn active">1</button>
+            <button class="pag-btn">2</button>
+            <button class="pag-btn">›</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════════════ PAGE: EXPORT ═══════════════ -->
+    <div class="page" id="page-export">
+      <div class="page-header">
+        <div class="page-title"><h1>Export</h1><p>Експортиране на данни</p></div>
+      </div>
+      <div class="stats-grid" style="grid-template-columns:1fr 1fr">
+        <div class="card">
+          <div class="card-title">📊 Export на заявки</div>
+          <div style="display:flex;flex-direction:column;gap:12px">
+            <div class="form-group"><label class="form-label">Период от</label><input type="date" class="form-control" value="2026-09-01"></div>
+            <div class="form-group"><label class="form-label">Период до</label><input type="date" class="form-control" value="2026-09-18"></div>
+            <div class="form-group"><label class="form-label">Статус</label>
+              <select class="form-control"><option>Всички</option><option>Потвърдено</option><option>Чакащ</option><option>Отхвърлено</option></select>
+            </div>
+            <div class="form-group"><label class="form-label">Формат</label>
+              <select class="form-control"><option>Excel (.xlsx)</option><option>CSV</option><option>PDF</option></select>
+            </div>
+            <button class="btn btn-primary" onclick="showToast('Export стартиран — файлът ще бъде готов след малко','#22c55e')">
+              <svg width="13" height="13" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+              Изтегли Export
+            </button>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-title">📋 Export на бенефициенти</div>
+          <div style="display:flex;flex-direction:column;gap:12px">
+            <div class="form-group"><label class="form-label">Локация</label>
+              <select class="form-control"><option>Всички</option><option>Пловдив</option><option>София</option><option>Варна</option></select>
+            </div>
+            <div class="form-group"><label class="form-label">Тип дейност</label>
+              <select class="form-control"><option>Всички</option><option>Кариерен център</option><option>Социална медиация</option><option>Управление на случай</option></select>
+            </div>
+            <div class="form-group"><label class="form-label">Формат</label>
+              <select class="form-control"><option>Excel (.xlsx)</option><option>CSV</option></select>
+            </div>
+            <button class="btn btn-primary" onclick="showToast('Export стартиран — файлът ще бъде готов след малко','#22c55e')">
+              <svg width="13" height="13" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+              Изтегли Export
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════════════ PAGE: EPAY ═══════════════ -->
+    <div class="page" id="page-epay">
+      <div class="page-header">
+        <div class="page-title"><h1>Export EPAY</h1><p>Генериране на EPAY файл за плащания</p></div>
+      </div>
+      <div class="card" style="max-width:500px">
+        <div class="card-title">💳 EPAY Конфигурация</div>
+        <div style="display:flex;flex-direction:column;gap:12px">
+          <div class="form-group"><label class="form-label">Месец</label>
+            <select class="form-control"><option>Септември 2026</option><option>Август 2026</option><option>Юли 2026</option></select>
+          </div>
+          <div class="form-group"><label class="form-label">Тип плащане</label>
+            <select class="form-control"><option>Социални помощи</option><option>Стипендии</option><option>Еднократни</option></select>
+          </div>
+          <div class="form-group"><label class="form-label">Сума (лв.)</label><input type="number" class="form-control" placeholder="0.00"></div>
+          <button class="btn btn-primary" onclick="showToast('EPAY файлът е генериран успешно','#22c55e')">
+            <svg width="13" height="13" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+            Генерирай EPAY файл
+          </button>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<!-- ═══ MODAL: EDIT / ADD REQUEST ═══ -->
+<div class="modal-overlay" id="modal-request">
+  <div class="modal" style="width:720px">
+    <div class="modal-header">
+      <div class="modal-title" id="modal-request-title">Добави заявка</div>
+      <button class="modal-close" onclick="closeModal('modal-request')">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-grid">
+        <div class="form-group">
+          <label class="form-label">Дейност</label>
+          <select class="form-control" id="req-activity">
+            <option>ХКЦ Пловдив - Управление на случай - кариерен център</option>
+            <option>ХКЦ Пловдив - Управление на случай - социална медиация</option>
+            <option>ХКЦ Пловдив - Управление на случай</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Бенефициент</label>
+          <select class="form-control" id="req-beneficiary">
+            <option>Тетяна Авраменко</option>
+            <option>Зора Методиева</option>
+            <option>Олександр Малцев</option>
+            <option>Тетяна Ходорчук</option>
+            <option>Алина Йовчева</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Статус</label>
+          <select class="form-control" id="req-status">
+            <option>Потвърдено</option>
+            <option>Чакащ</option>
+            <option>Отхвърлено</option>
+            <option>Приключен</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Съобщение / Локация</label>
+          <input class="form-control" placeholder="напр. Пловдив" id="req-message">
+        </div>
+        <div class="form-group form-full">
+          <label class="form-label">Описание</label>
+          <textarea class="form-control" rows="3" placeholder="Общо описание на заявката..." id="req-desc"></textarea>
+        </div>
+      </div>
+
+      <div class="case-tabs" id="case-tabs-bar">
+        <div class="case-tab active" onclick="showCase(0)">Case 1</div>
+        <div class="case-tab" onclick="showCase(1)">Case 2</div>
+        <div class="case-tab" onclick="showCase(2)">Case 3</div>
+        <div class="case-tab" onclick="showCase(3)">Case 4</div>
+        <div class="case-tab" onclick="showCase(4)">Case 5</div>
+        <div class="case-tab" onclick="showCase(5)">Case 6</div>
+      </div>
+
+      <div id="case-panel-0" class="case-panel active">
+        <div class="form-grid">
+          <div class="form-group"><label class="form-label">Дата Case 1</label><input type="date" class="form-control"></div>
+          <div class="form-group"><label class="form-label">Служител</label><input class="form-control" placeholder="напр. Таня"></div>
+          <div class="form-group form-full"><label class="form-label">Описание Case 1</label><textarea class="form-control" rows="3" placeholder="Описание на дейността..."></textarea></div>
+        </div>
+      </div>
+      <div id="case-panel-1" class="case-panel"><div class="form-grid"><div class="form-group"><label class="form-label">Дата Case 2</label><input type="date" class="form-control"></div><div class="form-group"><label class="form-label">Служител</label><input class="form-control" placeholder="напр. Анастасия"></div><div class="form-group form-full"><label class="form-label">Описание Case 2</label><textarea class="form-control" rows="3"></textarea></div></div></div>
+      <div id="case-panel-2" class="case-panel"><div class="form-grid"><div class="form-group"><label class="form-label">Дата Case 3</label><input type="date" class="form-control"></div><div class="form-group"><label class="form-label">Служител</label><input class="form-control"></div><div class="form-group form-full"><label class="form-label">Описание Case 3</label><textarea class="form-control" rows="3"></textarea></div></div></div>
+      <div id="case-panel-3" class="case-panel"><div class="form-grid"><div class="form-group"><label class="form-label">Дата Case 4</label><input type="date" class="form-control"></div><div class="form-group"><label class="form-label">Служител</label><input class="form-control"></div><div class="form-group form-full"><label class="form-label">Описание Case 4</label><textarea class="form-control" rows="3"></textarea></div></div></div>
+      <div id="case-panel-4" class="case-panel"><div class="form-grid"><div class="form-group"><label class="form-label">Дата Case 5</label><input type="date" class="form-control"></div><div class="form-group"><label class="form-label">Служител</label><input class="form-control"></div><div class="form-group form-full"><label class="form-label">Описание Case 5</label><textarea class="form-control" rows="3"></textarea></div></div></div>
+      <div id="case-panel-5" class="case-panel"><div class="form-grid"><div class="form-group"><label class="form-label">Дата Case 6</label><input type="date" class="form-control"></div><div class="form-group"><label class="form-label">Служител</label><input class="form-control"></div><div class="form-group form-full"><label class="form-label">Описание Case 6</label><textarea class="form-control" rows="3"></textarea></div></div></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-request')">Отказ</button>
+      <button class="btn btn-primary" onclick="saveRequest()">Запази</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ MODAL: SEARCH ═══ -->
+<div class="modal-overlay" id="modal-search">
+  <div class="modal" style="width:480px">
+    <div class="modal-header">
+      <div class="modal-title">Разширено търсене</div>
+      <button class="modal-close" onclick="closeModal('modal-search')">×</button>
+    </div>
+    <div class="modal-body">
+      <div style="display:flex;flex-direction:column;gap:12px">
+        <div class="form-group"><label class="form-label">Бенефициент</label><input class="form-control" placeholder="Търси по имe..."></div>
+        <div class="form-group"><label class="form-label">Дейност</label><select class="form-control"><option value="">-- Всички --</option><option>Кариерен център</option><option>Социална медиация</option><option>Управление на случай</option></select></div>
+        <div class="form-group"><label class="form-label">Статус</label><select class="form-control"><option value="">-- Всички --</option><option>Потвърдено</option><option>Чакащ</option><option>Отхвърлено</option></select></div>
+        <div class="form-grid">
+          <div class="form-group"><label class="form-label">Дата от</label><input type="date" class="form-control"></div>
+          <div class="form-group"><label class="form-label">Дата до</label><input type="date" class="form-control"></div>
+        </div>
+        <div class="form-group"><label class="form-label">Служител</label><select class="form-control"><option value="">-- Всички --</option><option>Таня</option><option>Анастасия</option><option>Николета</option></select></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-search')">Отказ</button>
+      <button class="btn btn-primary" onclick="doSearch()">Търси</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ MODAL: ADD BENEFICIARY ═══ -->
+<div class="modal-overlay" id="modal-beneficiary">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title" id="modal-ben-title">Добави бенефициент</div>
+      <button class="modal-close" onclick="closeModal('modal-beneficiary')">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-grid">
+        <div class="form-group"><label class="form-label">Имена</label><input class="form-control" id="ben-name" placeholder="Пълно имe"></div>
+        <div class="form-group"><label class="form-label">Локация</label><select class="form-control"><option>Пловдив</option><option>София</option><option>Варна</option></select></div>
+        <div class="form-group"><label class="form-label">Телефон</label><input class="form-control" placeholder="+359..."></div>
+        <div class="form-group"><label class="form-label">Email</label><input class="form-control" type="email" placeholder="email@..."></div>
+        <div class="form-group"><label class="form-label">Служител</label><select class="form-control"><option>Таня</option><option>Анастасия</option><option>Николета</option></select></div>
+        <div class="form-group"><label class="form-label">Статус</label><select class="form-control"><option>Активен</option><option>Чакащ</option><option>Приключен</option></select></div>
+        <div class="form-group form-full"><label class="form-label">Бележки</label><textarea class="form-control" rows="3" placeholder="Допълнителна информация..."></textarea></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-beneficiary')">Отказ</button>
+      <button class="btn btn-primary" onclick="saveBeneficiary()">Запази</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ MODAL: ADD TASK ═══ -->
+<div class="modal-overlay" id="modal-task">
+  <div class="modal" style="width:440px">
+    <div class="modal-header">
+      <div class="modal-title">Нова задача</div>
+      <button class="modal-close" onclick="closeModal('modal-task')">×</button>
+    </div>
+    <div class="modal-body">
+      <div style="display:flex;flex-direction:column;gap:12px">
+        <div class="form-group"><label class="form-label">Заглавие</label><input class="form-control" id="task-title-input" placeholder="Заглавие на задачата..."></div>
+        <div class="form-group"><label class="form-label">Краен срок</label><input type="date" class="form-control" id="task-deadline"></div>
+        <div class="form-group"><label class="form-label">Приоритет</label>
+          <select class="form-control" id="task-priority">
+            <option value="red">Спешна</option>
+            <option value="yellow" selected>Нормална</option>
+            <option value="blue">Планирана</option>
+          </select>
+        </div>
+        <div class="form-group"><label class="form-label">Описание</label><textarea class="form-control" rows="3" id="task-desc" placeholder="Описание..."></textarea></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-task')">Отказ</button>
+      <button class="btn btn-primary" onclick="addTask()">Добави</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ MODAL: ADD EMPLOYER ═══ -->
+<div class="modal-overlay" id="modal-employer">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title" id="modal-emp-title">Добави работодател</div>
+      <button class="modal-close" onclick="closeModal('modal-employer')">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-grid">
+        <div class="form-group"><label class="form-label">Организация</label><input class="form-control" placeholder="Наименование..."></div>
+        <div class="form-group"><label class="form-label">Сектор</label><select class="form-control"><option>Частен</option><option>НПО</option><option>Държавен</option></select></div>
+        <div class="form-group"><label class="form-label">Град</label><select class="form-control"><option>Пловдив</option><option>София</option><option>Варна</option></select></div>
+        <div class="form-group"><label class="form-label">Телефон</label><input class="form-control" placeholder="+359..."></div>
+        <div class="form-group"><label class="form-label">Email</label><input class="form-control" type="email"></div>
+        <div class="form-group"><label class="form-label">Контактно лице</label><input class="form-control"></div>
+        <div class="form-group form-full"><label class="form-label">Бележки</label><textarea class="form-control" rows="2"></textarea></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-employer')">Отказ</button>
+      <button class="btn btn-primary" onclick="saveEmployer()">Запази</button>
+    </div>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div class="toast" id="toast">
+  <div class="toast-dot" id="toast-dot"></div>
+  <span id="toast-msg"></span>
+</div>
+
+<script>
+// ─── DATA ───
+const requestsData = [
+  {id:14363,activity:'ХКЦ Пловдив - Управление на случай - кариерен център',msg:'Пловдив',case1:'18.09.2026-Таня - Информирана и консултирана...',case2:'',status:'Потвърдено',ben:'Тетяна Авраменко'},
+  {id:14361,activity:'ХКЦ Пловдив - Управление на случай - кариерен център',msg:'Пловдив',case1:'14.09.2026 - Анастасия - Проведено дълбочинно интервю...',case2:'15.09.2026 - Анастасия - Кандидатстване към АББ...',status:'Потвърдено',ben:'Зора Методиева'},
+  {id:14360,activity:'ХКЦ Пловдив - Управление на случай - кариерен център',msg:'Пловдив',case1:'11.09.2026-Таня-Информиран и консултиран...',case2:'',status:'Потвърдено',ben:'Олександр Малцев'},
+  {id:14359,activity:'ХКЦ Пловдив - Управление на случай - социална медиация',msg:'Пловдив',case1:'11.09.2026-Таня-Оказано съдействие за банкова сметка в Алианц банка',case2:'',status:'Потвърдено',ben:'Тетяна Ходорчук'},
+  {id:14358,activity:'ХКЦ Пловдив - Управление на случай - социална медиация',msg:'Пловдив',case1:'12.09.2026-Таня-Оказано съдействие за банкова сметка в Алианц банка',case2:'',status:'Потвърдено',ben:'Кира Лаптий'},
+  {id:14357,activity:'ХКЦ Пловдив - Управление на случай - кариерен център',msg:'Пловдив',case1:'01.09.2026-Таня-Бенефициентката започна работа в МОМ - Случая приключен',case2:'',status:'Потвърдено',ben:'Алина Йовчева'},
+  {id:14356,activity:'ХКЦ Пловдив - Управление на случай - кариерен център',msg:'Пловдив',case1:'09.09.2026-Таня - Информирана и консултирана...',case2:'',status:'Потвърдено',ben:'Юлия Беркута'},
+  {id:14355,activity:'ХКЦ Пловдив - Управление на случай - кариерен център',msg:'Пловдив',case1:'04.09.2026-Таня-Информиран и консултиран...',case2:'',status:'Потвърдено',ben:'Тимур Марченко'},
+  {id:14354,activity:'ХКЦ Пловдив - Управление на случай - кариерен център',msg:'Пловдив',case1:'09.09.2026 - Анастасия - Проведено дълбочинно интервю...',case2:'11.09.2026 - Анастасия - Кандидатстване към Верди М',status:'Потвърдено',ben:'Емилия Методиева'},
+  {id:14353,activity:'ХКЦ Пловдив - Управление на случай - кариерен център',msg:'Пловдив',case1:'09.09.2026 Николета',case2:'',status:'Потвърдено',ben:'Катерина Зайцева'},
+  {id:14352,activity:'ХКЦ Пловдив - Управление на случай - кариерен център',msg:'Пловдив',case1:'02.09.2026-Таня - Информирана и консултирана...',case2:'',status:'Потвърдено',ben:'Евгения Младинова'},
+  {id:14351,activity:'ХКЦ Пловдив - Управление на случай - кариерен център',msg:'Пловдив',case1:'02.09.2026-Таня - Информирана и консултирана...',case2:'',status:'Потвърдено',ben:'Карина Довгалюк'},
+  {id:14350,activity:'ХКЦ Пловдив - Управление на случай - кариерен център',msg:'Пловдив',case1:'01.09.2026 - Анастасия - Проведено дълбочинно интервю...',case2:'02.09.2026 - Кандидатстване jobs.bg',status:'Потвърдено',ben:''},
+  {id:14349,activity:'ХКЦ Пловдив - Управление на случай - кариерен център',msg:'Пловдив',case1:'27.08.2026 - Николета - Бенефициентката е информирана...',case2:'',status:'Потвърдено',ben:'Анка Ангелова'},
+  {id:14348,activity:'ХКЦ Пловдив - Управление на случай - кариерен център',msg:'Пловдив',case1:'31.08.2026 - Николета - Бенефициента е информиран...',case2:'',status:'Потвърдено',ben:'Прокопий Янев'},
+  {id:14347,activity:'ХКЦ Пловдив - Управление на случай - кариерен център',msg:'Пловдив',case1:'31.08.2026 - Анастасия - Проведено дълбочинно интервю...',case2:'',status:'Потвърдено',ben:'Таня Димитрова'},
+  {id:14346,activity:'ХКЦ Пловдив - Управление на случай - социална медиация',msg:'Пловдив',case1:'27.08.2026-Таня-Съдействие с банкова сметка',case2:'',status:'Потвърдено',ben:'Микола Зайка'},
+  {id:14345,activity:'ХКЦ Пловдив - Управление на случай - кариерен център',msg:'Пловдив',case1:'21.08.2026 - Николета - Информирана и консултирана...',case2:'02.09.2026 - Николета - Кандидатстване по свободни позиции',status:'Потвърдено',ben:'Анче Тодорова'},
+  {id:14344,activity:'ХКЦ Пловдив - Управление на случай - социална медиация',msg:'Пловдив',case1:'28.08.2026 - Николета - Съдействие за адресна регистрация...',case2:'',status:'Потвърдено',ben:'Валерия Коваленко'},
+  {id:14343,activity:'ХКЦ Пловдив - Управление на случай - кариерен център',msg:'Пловдив',case1:'27.08.2026 - Николета - Информиран и консултиран...',case2:'',status:'Потвърдено',ben:'Асен Ангелов'},
+];
+
+// ─── RENDER TABLE ───
+function renderRequests(data) {
+  const tbody = document.getElementById('req-tbody');
+  const statusMap = {
+    'Потвърдено':'badge-green','Чакащ':'badge-yellow',
+    'Отхвърлено':'badge-red','Приключен':'badge-blue'
+  };
+  tbody.innerHTML = data.map(r => `
+    <tr>
+      <td><input type="checkbox"></td>
+      <td><button class="btn btn-ghost btn-sm btn-icon" onclick="openEditRequest(${r.id})" title="Редакция">✏️</button></td>
+      <td style="color:var(--text3);font-size:12px">${r.id}</td>
+      <td><div class="cell-long" style="max-width:200px;color:var(--text);font-weight:500">${r.activity}</div></td>
+      <td style="color:var(--text3);font-size:12px">${r.msg}</td>
+      <td><div class="cell-long">${r.case1}</div></td>
+      <td><div class="cell-long">${r.case2||'—'}</div></td>
+      <td><span class="badge ${statusMap[r.status]||'badge-blue'}">${r.status}</span></td>
+      <td><div style="color:var(--text);font-weight:500;white-space:nowrap">${r.ben||'—'}</div></td>
+    </tr>
+  `).join('');
+}
+
+renderRequests(requestsData);
+
+// ─── NAVIGATION ───
+const pageNames = {
+  dashboard:'Основно табло', tasks:'Списък Задачи',
+  beneficiaries:'Бенефициенти', requests:'Заявки за Дейности',
+  employers:'Работодатели', export:'Export', epay:'Export EPAY'
+};
+
+function showPage(id, btn) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
+  document.getElementById('page-'+id).classList.add('active');
+  if(btn) btn.classList.add('active');
+  document.getElementById('breadcrumb-cur').textContent = pageNames[id] || id;
+}
+
+// ─── MODALS ───
+function openModal(id) { document.getElementById(id).classList.add('open'); }
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+
+document.querySelectorAll('.modal-overlay').forEach(m => {
+  m.addEventListener('click', e => { if(e.target === m) m.classList.remove('open'); });
+});
+
+function openAddRequest() {
+  document.getElementById('modal-request-title').textContent = 'Добави заявка';
+  openModal('modal-request');
+  showCase(0);
+}
+function openEditRequest(id) {
+  document.getElementById('modal-request-title').textContent = 'Редакция — Заявка #' + id;
+  const r = requestsData.find(x => x.id === id);
+  if(r) {
+    document.getElementById('req-message').value = r.msg;
+    document.getElementById('req-desc').value = r.case1;
+  }
+  openModal('modal-request');
+  showCase(0);
+}
+function openRequest(id) { closeNotif(); showPage('requests',null); openEditRequest(id); }
+function openSearchModal() { openModal('modal-search'); }
+function openAddBeneficiary() {
+  document.getElementById('modal-ben-title').textContent = 'Добави бенефициент';
+  document.getElementById('ben-name').value = '';
+  openModal('modal-beneficiary');
+}
+function openEditBeneficiary(name) {
+  document.getElementById('modal-ben-title').textContent = 'Редакция — ' + name;
+  document.getElementById('ben-name').value = name;
+  openModal('modal-beneficiary');
+}
+function openAddEmployer() {
+  document.getElementById('modal-emp-title').textContent = 'Добави работодател';
+  openModal('modal-employer');
+}
+function openEditEmployer(name) {
+  document.getElementById('modal-emp-title').textContent = 'Редакция — ' + name;
+  openModal('modal-employer');
+}
+function openAddTask() { openModal('modal-task'); }
+
+// ─── CASE TABS ───
+function showCase(i) {
+  document.querySelectorAll('.case-tab').forEach((t,idx) => t.classList.toggle('active', idx===i));
+  document.querySelectorAll('.case-panel').forEach((p,idx) => p.classList.toggle('active', idx===i));
+}
+
+// ─── SAVE ACTIONS ───
+function saveRequest() {
+  closeModal('modal-request');
+  showToast('Заявката е запазена успешно', '#22c55e');
+}
+function saveBeneficiary() {
+  closeModal('modal-beneficiary');
+  showToast('Бенефициентът е запазен успешно', '#22c55e');
+}
+function saveEmployer() {
+  closeModal('modal-employer');
+  showToast('Работодателят е запазен успешно', '#22c55e');
+}
+function doSearch() {
+  closeModal('modal-search');
+  showToast('Търсенето е приложено', '#3b6fd4');
+}
+function addTask() {
+  const title = document.getElementById('task-title-input').value.trim();
+  const deadline = document.getElementById('task-deadline').value;
+  const priority = document.getElementById('task-priority').value;
+  if(!title) return;
+  const map = {red:'badge-red',yellow:'badge-yellow',blue:'badge-blue'};
+  const label = {red:'Спешна',yellow:'Нормална',blue:'Планирана'};
+  const dl = deadline ? ` · Краен срок: ${deadline.split('-').reverse().join('.')}` : '';
+  const item = document.createElement('div');
+  item.className = 'task-item';
+  item.innerHTML = `
+    <div class="task-check"><input type="checkbox" onchange="toggleTask(this)"></div>
+    <div class="task-content">
+      <div class="task-title">${title}</div>
+      <div class="task-meta">${dl} <span class="badge ${map[priority]}" style="margin-left:6px">${label[priority]}</span></div>
+    </div>`;
+  document.getElementById('tasks-list').prepend(item);
+  closeModal('modal-task');
+  showToast('Задачата е добавена', '#22c55e');
+}
+
+// ─── TASK TOGGLE ───
+function toggleTask(cb) {
+  const item = cb.closest('.task-item');
+  item.classList.toggle('task-done', cb.checked);
+}
+
+// ─── FILTER ───
+function filterTable(tableId, q) {
+  const q2 = q.toLowerCase();
+  document.querySelectorAll('#'+tableId+' tbody tr').forEach(row => {
+    row.style.display = row.textContent.toLowerCase().includes(q2) ? '' : 'none';
+  });
+}
+function filterTasks(q) {
+  const q2 = q.toLowerCase();
+  document.querySelectorAll('#tasks-list .task-item').forEach(item => {
+    item.style.display = item.textContent.toLowerCase().includes(q2) ? '' : 'none';
+  });
+}
+
+// ─── SELECT ALL ───
+function selectAll(master, tableId) {
+  document.querySelectorAll('#'+tableId+' tbody input[type=checkbox]').forEach(cb => cb.checked = master.checked);
+}
+
+// ─── DELETE CONFIRM ───
+function confirmDelete() {
+  if(confirm('Сигурни ли сте, че искате да изтриете избраните записи?')) {
+    showToast('Записите са изтрити', '#ef4444');
+  }
+}
+
+// ─── NOTIFICATIONS ───
+let notifOpen = false;
+function toggleNotif() {
+  notifOpen = !notifOpen;
+  document.getElementById('notif-dropdown').classList.toggle('open', notifOpen);
+}
+function closeNotif() {
+  notifOpen = false;
+  document.getElementById('notif-dropdown').classList.remove('open');
+}
+function markAllRead() {
+  document.querySelectorAll('.notif-unread').forEach(n => n.classList.remove('notif-unread'));
+  document.getElementById('notif-count').textContent = '0';
+  document.getElementById('notif-count').style.background = '#64748b';
+}
+document.addEventListener('click', e => {
+  if(notifOpen && !e.target.closest('.topbar-notif')) closeNotif();
+});
+
+// ─── TOAST ───
+let toastTimer;
+function showToast(msg, color) {
+  clearTimeout(toastTimer);
+  const t = document.getElementById('toast');
+  document.getElementById('toast-msg').textContent = msg;
+  document.getElementById('toast-dot').style.background = color || '#22c55e';
+  t.classList.add('show');
+  toastTimer = setTimeout(() => t.classList.remove('show'), 3000);
+}
+</script>
+</body>
 </html>

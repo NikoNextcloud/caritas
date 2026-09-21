@@ -1,0 +1,67 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isLoggedIn() {
+      return request.auth != null;
+    }
+
+    function userRole() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
+    }
+
+    function isAdmin() {
+      return isLoggedIn() && userRole() == 'admin';
+    }
+
+    function isOperator() {
+      return isLoggedIn() && (userRole() == 'operator' || userRole() == 'admin');
+    }
+
+    // Потребители
+    match /users/{uid} {
+      allow read: if isLoggedIn();
+      allow create: if isAdmin();
+      allow update: if isAdmin() ||
+        (request.auth.uid == uid &&
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isOnline']));
+      allow delete: if isAdmin();
+    }
+
+    // Заявки за дейности
+    match /beneficiaryRequests/{id} {
+      allow read: if isLoggedIn();
+      allow create, update: if isOperator();
+      allow delete: if isAdmin();
+    }
+
+    // Бенефициенти
+    match /beneficiaries/{id} {
+      allow read: if isLoggedIn();
+      allow create, update: if isOperator();
+      allow delete: if isAdmin();
+    }
+
+    // Задачи
+    match /tasks/{id} {
+      allow read: if isLoggedIn();
+      allow create, update: if isOperator();
+      allow delete: if isAdmin();
+    }
+
+    // Работодатели
+    match /employers/{id} {
+      allow read: if isLoggedIn();
+      allow create, update: if isOperator();
+      allow delete: if isAdmin();
+    }
+
+    // Нотификации
+    match /notifications/{id} {
+      allow read: if isLoggedIn();
+      allow create: if isLoggedIn();
+      allow update: if isLoggedIn();
+      allow delete: if isAdmin();
+    }
+  }
+}
