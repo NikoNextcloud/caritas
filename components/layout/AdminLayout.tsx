@@ -104,7 +104,7 @@ export default function AdminLayout({ children, userName = 'Потребител
         <div className="flex items-center gap-3 px-4 py-2 border-b border-[#1a2226]" style={{ background: '#3c8dbc' }}>
           <Link href="/admin/dashboard" className="flex items-center gap-3">
             <Image src="/logo.png" alt="Caritas Logo" width={36} height={36}
-              className="rounded-sm flex-shrink-0" style={{ filter: 'brightness(0) invert(1)' }} />
+              className="rounded bg-white flex-shrink-0 object-contain" />
             <span className="text-white font-bold text-xl tracking-wide"><span className="font-black">C</span>aritas</span>
           </Link>
         </div>
@@ -162,7 +162,14 @@ export default function AdminLayout({ children, userName = 'Потребител
 
       <div className="flex-1 flex flex-col overflow-hidden">
         <header className="flex items-center justify-between px-4 h-14 flex-shrink-0 shadow-sm z-10" style={{ background: '#3c8dbc' }}>
-          <button onClick={() => setSidebarOpen(v => !v)} className="text-white p-1 hover:bg-[#367fa9] rounded"><Menu size={20} /></button>
+          <div className="flex items-center gap-3">
+            <button onClick={() => setSidebarOpen(v => !v)} className="text-white p-1 hover:bg-[#367fa9] rounded"><Menu size={20} /></button>
+            <Link href="/admin/dashboard" className="flex items-center gap-2 text-white font-semibold">
+              <Image src="/logo.png" alt="Caritas Logo" width={30} height={30}
+                className="rounded bg-white object-contain" />
+              <span className="hidden sm:inline">Caritas</span>
+            </Link>
+          </div>
           <div className="flex items-center gap-2">
             <div className="relative">
               <button onClick={() => setNotifOpen(v => !v)} className="relative text-white p-2 hover:bg-[#367fa9] rounded">

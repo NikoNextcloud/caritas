@@ -43,7 +43,8 @@ export default function LoginPage() {
               alt="Caritas Logo"
               width={80}
               height={80}
-              className="rounded-lg"
+              className="rounded-lg bg-white object-contain shadow-sm"
+              priority
             />
           </div>
           <h1 className="text-3xl font-light text-gray-600">
