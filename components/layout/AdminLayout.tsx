@@ -6,7 +6,7 @@ import { usePathname, useRouter } from 'next/navigation'
 import {
   LayoutDashboard, CheckSquare, Users, Briefcase,
   Download, CreditCard, User, LogOut, Bell, Menu, X,
-  ChevronRight
+  ChevronRight, Upload
 } from 'lucide-react'
 import { logout } from '@/lib/auth'
 import { subscribeToNotifications, markAllNotificationsRead, markNotificationRead } from '@/lib/db'
@@ -26,6 +26,7 @@ const MENU_ITEMS = [
   { label: 'Export',        href: '/admin/export',          icon: Download },
   { label: 'Export EPAY',   href: '/admin/export-epay',     icon: CreditCard },
   { label: 'Потребители',   href: '/admin/users',           icon: User },
+  { label: 'Импорт',        href: '/admin/import',          icon: Upload },
 ]
 
 interface Props {
