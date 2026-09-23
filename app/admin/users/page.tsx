@@ -149,7 +149,7 @@ export default function UsersPage() {
 
           {loading ? (
             <div className="flex justify-center py-12">
-              <div className="animate-spin w-8 h-8 border-4 border-[#3c8dbc] border-t-transparent rounded-full"></div>
+              <div className="primary-spinner animate-spin w-8 h-8 border-4 rounded-full"></div>
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -188,7 +188,7 @@ export default function UsersPage() {
                         <select
                           value={u.role}
                           onChange={e => handleRoleChange(u.uid, e.target.value as UserRole)}
-                          className="text-xs border border-gray-300 rounded px-2 py-1 focus:outline-none focus:border-[#3c8dbc]"
+                          className="text-xs border border-gray-300 rounded px-2 py-1 focus:outline-none focus:border-[var(--brand-primary)]"
                         >
                           {ROLES.map(role => (
                             <option key={role} value={role}>{roleLabel[role]}</option>

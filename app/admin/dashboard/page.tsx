@@ -65,14 +65,14 @@ export default function DashboardPage() {
         <>
           {/* Stats Grid */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-            <StatCard label="Всички заявки"    value={stats.totalRequests}      icon={FileText}   color="#3c8dbc" href="/admin/requests" />
+            <StatCard label="Всички заявки"    value={stats.totalRequests}      icon={FileText}   color="var(--brand-primary)" href="/admin/requests" />
             <StatCard label="Потвърдени"        value={stats.confirmedRequests}  icon={CheckCircle} color="#00a65a" href="/admin/requests?status=Потвърдено" />
             <StatCard label="Чакащи"            value={stats.pendingRequests}    icon={Clock}       color="#f39c12" href="/admin/requests?status=Чакащ" />
             <StatCard label="Отхвърлени"        value={stats.rejectedRequests}   icon={XCircle}     color="#dd4b39" href="/admin/requests?status=Отхвърлено" />
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
-            <StatCard label="Бенефициенти"     value={stats.totalBeneficiaries} icon={Users}       color="#3c8dbc" href="/admin/beneficiaries" />
+            <StatCard label="Бенефициенти"     value={stats.totalBeneficiaries} icon={Users}       color="var(--brand-primary)" href="/admin/beneficiaries" />
             <StatCard label="Задачи"            value={stats.totalTasks}         icon={CheckSquare} color="#00c0ef" href="/admin/tasks" />
             <StatCard label="Работодатели"      value={stats.totalEmployers}     icon={Briefcase}   color="#605ca8" href="/admin/employers" />
             <StatCard label="Доброволци"        value={stats.totalVolunteers}    icon={HeartHandshake} color="#00a65a" href="/admin/volunteers" />

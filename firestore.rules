@@ -50,7 +50,7 @@ service cloud.firestore {
     }
 
     match /beneficiaries/{id} {
-      allow read: if admin() || ownedByUser(resource.data);
+      allow read: if signedIn();
       allow create: if canCreateOwned();
       allow update: if canUpdateOwned();
       allow delete: if admin();
@@ -64,21 +64,21 @@ service cloud.firestore {
     }
 
     match /employers/{id} {
-      allow read: if admin() || ownedByUser(resource.data);
+      allow read: if signedIn();
       allow create: if canCreateOwned();
       allow update: if canUpdateOwned();
       allow delete: if admin();
     }
 
     match /volunteers/{id} {
-      allow read: if admin() || ownedByUser(resource.data);
+      allow read: if signedIn();
       allow create: if canCreateOwned();
       allow update: if canUpdateOwned();
       allow delete: if admin();
     }
 
     match /donors/{id} {
-      allow read: if admin() || ownedByUser(resource.data);
+      allow read: if signedIn();
       allow create: if canCreateOwned();
       allow update: if canUpdateOwned();
       allow delete: if admin();

@@ -31,10 +31,17 @@ async function currentAccess() {
   }
 }
 
+const sharedReadCollections = new Set([
+  'beneficiaries',
+  'employers',
+  'volunteers',
+  'donors',
+])
+
 async function visibleCollection<T>(collectionName: string): Promise<T[]> {
   const access = await currentAccess()
   const ref = collection(db, collectionName)
-  if (access.isAdmin) {
+  if (access.isAdmin || sharedReadCollections.has(collectionName)) {
     const snap = await getDocs(ref)
     return snap.docs.map(d => ({ id: d.id, ...d.data() } as T))
   }

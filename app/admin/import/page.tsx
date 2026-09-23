@@ -206,8 +206,8 @@ export default function ImportPage() {
           <div className="box-body">
             <p className="text-sm text-gray-600 mb-4">Импортът разпознава комбинираната таблица и записва всички колони в правилните полета. Съществуващите записи със същия ID се обновяват, вместо да се пропускат.</p>
             <button type="button" onClick={() => fileRef.current?.click()}
-              className="w-full border-2 border-dashed border-gray-300 hover:border-[#3c8dbc] rounded-lg p-10 text-center transition-colors">
-              <Upload size={38} className="mx-auto mb-3 text-[#3c8dbc]" />
+              className="w-full border-2 border-dashed border-gray-300 hover:border-[var(--brand-primary)] rounded-lg p-10 text-center transition-colors">
+              <Upload size={38} className="mx-auto mb-3 text-[var(--brand-primary)]" />
               <span className="block text-sm font-medium text-gray-700">{fileName || 'Избери .xlsx, .xls или .csv файл'}</span>
             </button>
             <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={event => event.target.files?.[0] && parseFile(event.target.files[0])} />
@@ -242,7 +242,7 @@ export default function ImportPage() {
               </button>
             </div>
             {clearBeforeImport && <p className="mt-3 flex items-center gap-2 text-xs text-red-600"><AlertTriangle size={14} /> Тази опция изтрива всички текущи бенефициенти и заявки. Използвай я само за пълна подмяна.</p>}
-            {progressLabel && <div className="mt-4"><div className="flex justify-between text-xs text-gray-500"><span>{progressLabel}</span><span>{progress}%</span></div><div className="h-2 bg-gray-200 rounded mt-1"><div className="h-2 bg-[#3c8dbc] rounded" style={{ width: `${progress}%` }} /></div></div>}
+            {progressLabel && <div className="mt-4"><div className="flex justify-between text-xs text-gray-500"><span>{progressLabel}</span><span>{progress}%</span></div><div className="h-2 bg-gray-200 rounded mt-1"><div className="h-2 bg-[var(--brand-primary)] rounded" style={{ width: `${progress}%` }} /></div></div>}
           </div></div>
         )}
 

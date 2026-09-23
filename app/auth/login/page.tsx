@@ -48,7 +48,7 @@ export default function LoginPage() {
             />
           </div>
           <h1 className="text-3xl font-light text-gray-600">
-            <span className="font-bold" style={{ color: '#3c8dbc' }}>C</span>aritas
+            <span className="font-bold" style={{ color: 'var(--brand-primary)' }}>C</span>aritas
           </h1>
           <p className="text-gray-500 text-sm mt-1">Здравей! Можеш да се логнеш в администрацията</p>
         </div>

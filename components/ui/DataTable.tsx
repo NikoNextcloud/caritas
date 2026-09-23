@@ -54,7 +54,7 @@ export default function DataTable<T extends { id: string }>({
   if (loading) {
     return (
       <div className="flex items-center justify-center py-16">
-        <div className="animate-spin w-8 h-8 border-4 border-[#3c8dbc] border-t-transparent rounded-full"></div>
+        <div className="primary-spinner animate-spin w-8 h-8 border-4 rounded-full"></div>
       </div>
     )
   }
@@ -124,7 +124,7 @@ export default function DataTable<T extends { id: string }>({
                 {onEdit && (
                   <td className="px-2 py-2">
                     <button onClick={() => onEdit(row)}
-                      className="text-[#3c8dbc] hover:text-[#367fa9] transition-colors p-1">
+                      className="text-[var(--brand-primary)] hover:brightness-75 transition p-1">
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                         <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
                         <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
@@ -176,7 +176,7 @@ export default function DataTable<T extends { id: string }>({
                 <button key={pageNum} onClick={() => setPage(pageNum)}
                   className={`w-8 h-8 rounded text-sm font-medium transition-colors
                     ${page === pageNum
-                      ? 'bg-[#3c8dbc] text-white'
+                      ? 'bg-[var(--brand-primary)] text-white'
                       : 'hover:bg-gray-100 text-gray-600'}`}>
                   {pageNum}
                 </button>

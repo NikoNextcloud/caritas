@@ -153,7 +153,7 @@ export default function BeneficiariesPage() {
     {
       key: 'photoUrl', label: 'Снимка', width: '76px', render: (r: Beneficiary) => r.photoUrl ? (
         <button type="button" onClick={() => setViewPhoto(r.photoUrl!)}
-          className="block rounded border border-gray-200 overflow-hidden hover:ring-2 hover:ring-[#3c8dbc] focus:outline-none focus:ring-2 focus:ring-[#3c8dbc]"
+          className="block rounded border border-gray-200 overflow-hidden hover:ring-2 hover:ring-[var(--brand-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-primary)]"
           title="Виж снимка" aria-label={`Виж снимка на ${r.firstName} ${r.lastName}`}>
           <img src={r.photoUrl} alt={`${r.firstName} ${r.lastName}`}
             className="w-11 h-11 object-cover bg-gray-100" />
@@ -218,7 +218,7 @@ export default function BeneficiariesPage() {
             <div className="flex flex-col sm:flex-row sm:items-center gap-4 rounded border border-gray-200 bg-gray-50 p-3">
               {photoPreview ? (
                 <button type="button" onClick={() => setViewPhoto(photoPreview)}
-                  className="w-24 h-24 rounded border border-gray-200 bg-white overflow-hidden hover:ring-2 hover:ring-[#3c8dbc] flex-shrink-0"
+                  className="w-24 h-24 rounded border border-gray-200 bg-white overflow-hidden hover:ring-2 hover:ring-[var(--brand-primary)] flex-shrink-0"
                   title="Виж снимка">
                   <img src={photoPreview} alt="Преглед на снимката" className="w-full h-full object-cover" />
                 </button>

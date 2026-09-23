@@ -4,40 +4,18 @@
 
 /* AdminLTE Color Variables */
 :root {
-  --sidebar-bg: #222d32;
-  --sidebar-hover: #1e282c;
-  --sidebar-active: #1a2226;
-  --sidebar-text: #8aa4af;
-  --sidebar-header: #4b646f;
-  --brand-primary: #3c8dbc;
-  --brand-success: #00a65a;
-  --brand-warning: #f39c12;
-  --brand-danger: #dd4b39;
-  --brand-info: #00c0ef;
-  --header-bg: #3c8dbc;
-  --content-bg: #ecf0f5;
-}
-
-:root[data-theme='caritas'] {
   --sidebar-bg: #321f22;
   --sidebar-hover: #43282c;
   --sidebar-active: #241619;
   --sidebar-text: #d7b9bc;
   --sidebar-header: #9b6b70;
   --brand-primary: #9b1c22;
+  --brand-success: #00a65a;
+  --brand-warning: #f39c12;
+  --brand-danger: #dd4b39;
+  --brand-info: #00c0ef;
   --header-bg: #9b1c22;
   --content-bg: #f5efef;
-}
-
-:root[data-theme='green'] {
-  --sidebar-bg: #18312b;
-  --sidebar-hover: #21433a;
-  --sidebar-active: #10251f;
-  --sidebar-text: #a9c9bf;
-  --sidebar-header: #648f82;
-  --brand-primary: #18785f;
-  --header-bg: #18785f;
-  --content-bg: #edf5f2;
 }
 
 * { box-sizing: border-box; }
@@ -51,7 +29,7 @@ body { margin: 0; font-family: 'Source Sans Pro', 'Helvetica Neue', Helvetica, A
 /* AdminLTE-style components */
 @layer components {
   .btn-primary {
-    @apply bg-[#3c8dbc] hover:bg-[#367fa9] text-white px-4 py-2 rounded text-sm font-medium transition-colors inline-flex items-center gap-2 cursor-pointer;
+    @apply text-white px-4 py-2 rounded text-sm font-medium transition-colors inline-flex items-center gap-2 cursor-pointer;
   }
   .btn-success {
     @apply bg-[#00a65a] hover:bg-[#008d4c] text-white px-4 py-2 rounded text-sm font-medium transition-colors inline-flex items-center gap-2 cursor-pointer;
@@ -96,7 +74,7 @@ body { margin: 0; font-family: 'Source Sans Pro', 'Helvetica Neue', Helvetica, A
     @apply bg-gray-500 text-white text-xs px-2 py-0.5 rounded;
   }
   .form-control {
-    @apply w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:border-[#3c8dbc] focus:ring-1 focus:ring-[#3c8dbc];
+    @apply w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1;
   }
   .form-group {
     @apply mb-4;
@@ -118,3 +96,7 @@ body { margin: 0; font-family: 'Source Sans Pro', 'Helvetica Neue', Helvetica, A
   --tw-ring-color: var(--brand-primary) !important;
 }
 .sidebar-nav-item:hover { background-color: var(--sidebar-hover) !important; }
+.primary-spinner {
+  border-color: var(--brand-primary);
+  border-top-color: transparent;
+}

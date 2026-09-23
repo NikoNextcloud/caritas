@@ -5,7 +5,7 @@ import Image from 'next/image'
 import { usePathname, useRouter } from 'next/navigation'
 import {
   Bell, Briefcase, CheckSquare, ChevronRight, Download, HandHeart,
-  HeartHandshake, LayoutDashboard, LogOut, Menu, Palette, Upload, User, Users,
+  HeartHandshake, LayoutDashboard, LogOut, Menu, Upload, User, Users,
 } from 'lucide-react'
 import { getAdminUser, logout, onAuth, setOnlineStatus } from '@/lib/auth'
 import { markAllNotificationsRead, markNotificationRead, subscribeToNotifications, subscribeToOnlineUsers } from '@/lib/db'
@@ -42,8 +42,6 @@ interface Props {
   userName?: string
 }
 
-type ColorTheme = 'blue' | 'caritas' | 'green'
-
 export default function AdminLayout({ children, userName = 'Потребител' }: Props) {
   const pathname = usePathname()
   const router = useRouter()
@@ -55,7 +53,6 @@ export default function AdminLayout({ children, userName = 'Потребител
   const [role, setRole] = useState<UserRole>('user')
   const [authReady, setAuthReady] = useState(false)
   const [onlineUsers, setOnlineUsers] = useState<AdminUser[]>([])
-  const [theme, setTheme] = useState<ColorTheme>('blue')
   const prevUnreadCount = useRef(0)
 
   const unreadCount = notifications.filter(n => !n.isRead).length
@@ -76,22 +73,9 @@ export default function AdminLayout({ children, userName = 'Потребител
   }), [router, userName])
 
   useEffect(() => {
-    const saved = (localStorage.getItem('caritas-color-theme') || 'blue') as ColorTheme
-    const selected: ColorTheme = ['blue', 'caritas', 'green'].includes(saved) ? saved : 'blue'
-    setTheme(selected)
-    document.documentElement.dataset.theme = selected
-  }, [])
-
-  useEffect(() => {
     if (!authReady || role !== 'admin') return
     return subscribeToOnlineUsers(setOnlineUsers, () => setOnlineUsers([]))
   }, [authReady, role])
-
-  function changeTheme(value: ColorTheme) {
-    setTheme(value)
-    document.documentElement.dataset.theme = value
-    localStorage.setItem('caritas-color-theme', value)
-  }
 
   useEffect(() => {
     if (!authReady) return
@@ -206,18 +190,8 @@ export default function AdminLayout({ children, userName = 'Потребител
             <button onClick={() => setSidebarOpen(v => !v)} className="text-white p-1 hover:bg-black/10 rounded"><Menu size={20} /></button>
           </div>
           <div className="flex items-center gap-2">
-            <div className="flex items-center gap-1 text-white mr-1">
-              <Palette size={17} />
-              <select value={theme} onChange={e => changeTheme(e.target.value as ColorTheme)}
-                className="bg-white/15 border border-white/30 rounded px-2 py-1 text-xs text-white focus:outline-none cursor-pointer"
-                aria-label="Цветова схема">
-                <option className="text-gray-800" value="blue">Синя</option>
-                <option className="text-gray-800" value="caritas">Каритас</option>
-                <option className="text-gray-800" value="green">Зелена</option>
-              </select>
-            </div>
             <div className="relative">
-              <button onClick={() => setNotifOpen(v => !v)} className="relative text-white p-2 hover:bg-[#367fa9] rounded">
+              <button onClick={() => setNotifOpen(v => !v)} className="relative text-white p-2 hover:bg-black/10 rounded">
                 <Bell size={18} />
                 {unreadCount > 0 && <span className="absolute top-0.5 right-0.5 bg-[#dd4b39] text-white text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center">{unreadCount > 9 ? '9+' : unreadCount}</span>}
               </button>
@@ -225,13 +199,13 @@ export default function AdminLayout({ children, userName = 'Потребител
                 <div className="absolute right-0 top-full mt-1 w-80 bg-white rounded shadow-lg border border-gray-200 z-50">
                   <div className="flex items-center justify-between px-4 py-3 border-b">
                     <span className="font-semibold text-sm">Имате {unreadCount} нови нотификации</span>
-                    <button onClick={handleMarkAllRead} className="text-xs text-[#3c8dbc] hover:underline">Маркирай всички</button>
+                    <button onClick={handleMarkAllRead} className="text-xs text-[var(--brand-primary)] hover:underline">Маркирай всички</button>
                   </div>
                   <div className="max-h-64 overflow-y-auto">
                     {notifications.length === 0 ? <p className="text-center text-gray-500 text-sm py-4">Няма нотификации</p> : notifications.map(n => (
                       <button key={n.id} onClick={() => markNotificationRead(n.id)}
                         className={`w-full text-left flex items-start gap-3 px-4 py-3 border-b border-gray-100 hover:bg-gray-50 ${!n.isRead ? 'bg-blue-50' : ''}`}>
-                        <Bell size={16} className="text-[#3c8dbc] mt-0.5" />
+                        <Bell size={16} className="text-[var(--brand-primary)] mt-0.5" />
                         <span className="min-w-0"><span className="block text-sm font-medium text-gray-800 truncate">{n.title}</span><span className="text-xs text-gray-500">{n.createdAt?.split('T')[0]}</span></span>
                       </button>
                     ))}
@@ -243,7 +217,7 @@ export default function AdminLayout({ children, userName = 'Потребител
           </div>
         </header>
         <main className="flex-1 overflow-y-auto p-4 md:p-6">
-          {authReady ? children : <div className="flex items-center justify-center h-full"><div className="animate-spin w-9 h-9 border-4 border-[#3c8dbc] border-t-transparent rounded-full" /></div>}
+          {authReady ? children : <div className="flex items-center justify-center h-full"><div className="primary-spinner animate-spin w-9 h-9 border-4 rounded-full" /></div>}
         </main>
       </div>
     </div>

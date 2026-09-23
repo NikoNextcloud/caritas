@@ -38,7 +38,7 @@ export default function Modal({ open, onClose, title, children, size = 'md' }: P
       <div className={`relative bg-white rounded shadow-xl w-full ${sizes[size]} flex flex-col max-h-[90vh]`}>
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 flex-shrink-0"
-          style={{ background: '#3c8dbc' }}>
+          style={{ background: 'var(--brand-primary)' }}>
           <h3 className="text-white font-semibold text-base">{title}</h3>
           <button onClick={onClose}
             className="text-white hover:text-gray-200 transition-colors p-1 rounded">
