@@ -4,9 +4,10 @@ import AdminLayout from '@/components/layout/AdminLayout'
 import DataTable from '@/components/ui/DataTable'
 import Modal from '@/components/ui/Modal'
 import UserAssignment from '@/components/ui/UserAssignment'
+import JobPositionsSection from './JobPositionsSection'
 import { getEmployers, addEmployer, updateEmployer, deleteEmployer } from '@/lib/db'
 import type { Employer } from '@/types'
-import { Plus, Search } from 'lucide-react'
+import { BriefcaseBusiness, Building2, Plus, Search } from 'lucide-react'
 import toast, { Toaster } from 'react-hot-toast'
 
 const EMPTY: Partial<Employer> = {
@@ -21,6 +22,7 @@ export default function EmployersPage() {
   const [isNew, setIsNew] = useState(false)
   const [saving, setSaving] = useState(false)
   const [query, setQuery] = useState('')
+  const [section, setSection] = useState<'employers' | 'positions'>('employers')
 
   async function load() {
     setLoading(true)
@@ -84,22 +86,37 @@ export default function EmployersPage() {
       </div>
       <div className="box">
         <div className="box-header">
-          <span className="box-title">Работодатели</span>
-        </div>
-        <div className="box-body">
-          <div className="flex items-center gap-2 mb-4">
-            <div className="flex items-center gap-2 flex-1">
-              <input type="text" placeholder="Търси по наименование, ЕИК, град..."
-                className="form-control max-w-xs" value={query}
-                onChange={e => setQuery(e.target.value)} />
-              <Search size={16} className="text-gray-400" />
-            </div>
-            <button onClick={openNew} className="btn-primary flex-shrink-0">
-              <Plus size={16} /> Добави
+          <div className="flex items-center gap-2">
+            <button onClick={() => setSection('employers')}
+              className={section === 'employers' ? 'btn-primary' : 'btn-default'}>
+              <Building2 size={16} /> Работодатели
+            </button>
+            <button onClick={() => setSection('positions')}
+              className={section === 'positions' ? 'btn-primary' : 'btn-default'}>
+              <BriefcaseBusiness size={16} /> Позиции за работа
             </button>
           </div>
-          <DataTable columns={columns} data={filtered} loading={loading}
-            onEdit={openEdit} onDelete={handleDelete} />
+        </div>
+        <div className="box-body">
+          {section === 'employers' ? (
+            <>
+              <div className="flex items-center gap-2 mb-4">
+                <div className="flex items-center gap-2 flex-1">
+                  <input type="text" placeholder="Търси по наименование, ЕИК, град..."
+                    className="form-control max-w-xs" value={query}
+                    onChange={e => setQuery(e.target.value)} />
+                  <Search size={16} className="text-gray-400" />
+                </div>
+                <button onClick={openNew} className="btn-primary flex-shrink-0">
+                  <Plus size={16} /> Добави
+                </button>
+              </div>
+              <DataTable columns={columns} data={filtered} loading={loading}
+                onEdit={openEdit} onDelete={handleDelete} />
+            </>
+          ) : (
+            <JobPositionsSection employers={data} onChanged={load} />
+          )}
         </div>
       </div>
 

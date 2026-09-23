@@ -18,6 +18,28 @@
   --content-bg: #ecf0f5;
 }
 
+:root[data-theme='caritas'] {
+  --sidebar-bg: #321f22;
+  --sidebar-hover: #43282c;
+  --sidebar-active: #241619;
+  --sidebar-text: #d7b9bc;
+  --sidebar-header: #9b6b70;
+  --brand-primary: #9b1c22;
+  --header-bg: #9b1c22;
+  --content-bg: #f5efef;
+}
+
+:root[data-theme='green'] {
+  --sidebar-bg: #18312b;
+  --sidebar-hover: #21433a;
+  --sidebar-active: #10251f;
+  --sidebar-text: #a9c9bf;
+  --sidebar-header: #648f82;
+  --brand-primary: #18785f;
+  --header-bg: #18785f;
+  --content-bg: #edf5f2;
+}
+
 * { box-sizing: border-box; }
 body { margin: 0; font-family: 'Source Sans Pro', 'Helvetica Neue', Helvetica, Arial, sans-serif; }
 
@@ -86,3 +108,13 @@ body { margin: 0; font-family: 'Source Sans Pro', 'Helvetica Neue', Helvetica, A
     @apply bg-gray-50;
   }
 }
+
+.btn-primary {
+  background-color: var(--brand-primary) !important;
+}
+.btn-primary:hover { filter: brightness(.9); }
+.form-control:focus {
+  border-color: var(--brand-primary) !important;
+  --tw-ring-color: var(--brand-primary) !important;
+}
+.sidebar-nav-item:hover { background-color: var(--sidebar-hover) !important; }

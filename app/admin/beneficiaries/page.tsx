@@ -1,5 +1,5 @@
 'use client'
-import { ChangeEvent, useEffect, useState } from 'react'
+import { ChangeEvent, useEffect, useMemo, useState } from 'react'
 import AdminLayout from '@/components/layout/AdminLayout'
 import DataTable from '@/components/ui/DataTable'
 import Modal from '@/components/ui/Modal'
@@ -7,7 +7,7 @@ import UserAssignment from '@/components/ui/UserAssignment'
 import { getBeneficiaries, addBeneficiary, updateBeneficiary, deleteBeneficiary } from '@/lib/db'
 import { prepareBeneficiaryPhoto, validateBeneficiaryPhoto } from '@/lib/beneficiary-images'
 import type { Beneficiary } from '@/types'
-import { ImageIcon, Plus, Search, Upload } from 'lucide-react'
+import { ArrowDownAZ, ArrowUpAZ, ImageIcon, Plus, Search, Upload } from 'lucide-react'
 import toast, { Toaster } from 'react-hot-toast'
 
 const EMPTY: Partial<Beneficiary> = {
@@ -27,8 +27,10 @@ function numericBeneficiaryId(beneficiary: Partial<Beneficiary>) {
     hash ^= source.charCodeAt(index)
     hash = Math.imul(hash, 16777619)
   }
-  return String(100000000 + (hash >>> 0) % 900000000)
+  return String(100000 + (hash >>> 0) % 900000)
 }
+
+type SortKey = 'id' | 'firstName' | 'lastName'
 
 export default function BeneficiariesPage() {
   const [data, setData] = useState<Beneficiary[]>([])
@@ -41,6 +43,8 @@ export default function BeneficiariesPage() {
   const [photoFile, setPhotoFile] = useState<File | null>(null)
   const [photoPreview, setPhotoPreview] = useState('')
   const [viewPhoto, setViewPhoto] = useState('')
+  const [sortKey, setSortKey] = useState<SortKey>('lastName')
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc')
 
   async function load() {
     setLoading(true)
@@ -61,6 +65,15 @@ export default function BeneficiariesPage() {
         numericBeneficiaryId(b).includes(query)
       )
     : data
+
+  const sorted = useMemo(() => [...filtered].sort((a, b) => {
+    const first = sortKey === 'id' ? Number(numericBeneficiaryId(a)) : (a[sortKey] || '').toLocaleLowerCase('bg')
+    const second = sortKey === 'id' ? Number(numericBeneficiaryId(b)) : (b[sortKey] || '').toLocaleLowerCase('bg')
+    const result = typeof first === 'number' && typeof second === 'number'
+      ? first - second
+      : String(first).localeCompare(String(second), 'bg')
+    return sortDirection === 'asc' ? result : -result
+  }), [filtered, sortKey, sortDirection])
 
   function resetPhotoSelection() {
     if (photoPreview.startsWith('blob:')) URL.revokeObjectURL(photoPreview)
@@ -136,7 +149,7 @@ export default function BeneficiariesPage() {
   }
 
   const columns = [
-    { key: 'id', label: 'ID', width: '110px', render: (r: Beneficiary) => numericBeneficiaryId(r) },
+    { key: 'id', label: 'ID', width: '80px', render: (r: Beneficiary) => numericBeneficiaryId(r) },
     {
       key: 'photoUrl', label: 'Снимка', width: '76px', render: (r: Beneficiary) => r.photoUrl ? (
         <button type="button" onClick={() => setViewPhoto(r.photoUrl!)}
@@ -178,11 +191,21 @@ export default function BeneficiariesPage() {
                 onChange={e => setQuery(e.target.value)} />
               <Search size={16} className="text-gray-400" />
             </div>
+            <select className="form-control !w-auto" value={sortKey}
+              onChange={e => setSortKey(e.target.value as SortKey)} aria-label="Сортиране на бенефициентите">
+              <option value="id">Сортиране по ID</option>
+              <option value="firstName">Сортиране по име</option>
+              <option value="lastName">Сортиране по фамилия</option>
+            </select>
+            <button type="button" onClick={() => setSortDirection(v => v === 'asc' ? 'desc' : 'asc')}
+              className="btn-default px-3" title={sortDirection === 'asc' ? 'Възходящо' : 'Низходящо'}>
+              {sortDirection === 'asc' ? <ArrowDownAZ size={18} /> : <ArrowUpAZ size={18} />}
+            </button>
             <button onClick={openNew} className="btn-primary flex-shrink-0">
               <Plus size={16} /> Добави
             </button>
           </div>
-          <DataTable columns={columns} data={filtered} loading={loading}
+          <DataTable columns={columns} data={sorted} loading={loading}
             onEdit={openEdit} onDelete={handleDelete} />
         </div>
       </div>

@@ -5,11 +5,11 @@ import Image from 'next/image'
 import { usePathname, useRouter } from 'next/navigation'
 import {
   Bell, Briefcase, CheckSquare, ChevronRight, Download, HandHeart,
-  HeartHandshake, LayoutDashboard, LogOut, Menu, Upload, User, Users,
+  HeartHandshake, LayoutDashboard, LogOut, Menu, Palette, Upload, User, Users,
 } from 'lucide-react'
-import { getAdminUser, logout, onAuth } from '@/lib/auth'
-import { markAllNotificationsRead, markNotificationRead, subscribeToNotifications } from '@/lib/db'
-import type { Notification, UserRole } from '@/types'
+import { getAdminUser, logout, onAuth, setOnlineStatus } from '@/lib/auth'
+import { markAllNotificationsRead, markNotificationRead, subscribeToNotifications, subscribeToOnlineUsers } from '@/lib/db'
+import type { AdminUser, Notification, UserRole } from '@/types'
 import toast from 'react-hot-toast'
 
 interface MenuItem {
@@ -42,6 +42,8 @@ interface Props {
   userName?: string
 }
 
+type ColorTheme = 'blue' | 'caritas' | 'green'
+
 export default function AdminLayout({ children, userName = 'Потребител' }: Props) {
   const pathname = usePathname()
   const router = useRouter()
@@ -52,6 +54,8 @@ export default function AdminLayout({ children, userName = 'Потребител
   const [displayName, setDisplayName] = useState(userName)
   const [role, setRole] = useState<UserRole>('user')
   const [authReady, setAuthReady] = useState(false)
+  const [onlineUsers, setOnlineUsers] = useState<AdminUser[]>([])
+  const [theme, setTheme] = useState<ColorTheme>('blue')
   const prevUnreadCount = useRef(0)
 
   const unreadCount = notifications.filter(n => !n.isRead).length
@@ -61,11 +65,33 @@ export default function AdminLayout({ children, userName = 'Потребител
       router.replace('/auth/login')
       return
     }
+    await setOnlineStatus(true)
     const profile = await getAdminUser(user.uid)
     setDisplayName(profile?.displayName || user.displayName || user.email || userName)
     setRole(profile?.role || 'user')
+    if ((profile?.role || 'user') !== 'admin') {
+      setOnlineUsers(profile ? [{ ...profile, isOnline: true }] : [])
+    }
     setAuthReady(true)
   }), [router, userName])
+
+  useEffect(() => {
+    const saved = (localStorage.getItem('caritas-color-theme') || 'blue') as ColorTheme
+    const selected: ColorTheme = ['blue', 'caritas', 'green'].includes(saved) ? saved : 'blue'
+    setTheme(selected)
+    document.documentElement.dataset.theme = selected
+  }, [])
+
+  useEffect(() => {
+    if (!authReady || role !== 'admin') return
+    return subscribeToOnlineUsers(setOnlineUsers, () => setOnlineUsers([]))
+  }, [authReady, role])
+
+  function changeTheme(value: ColorTheme) {
+    setTheme(value)
+    document.documentElement.dataset.theme = value
+    localStorage.setItem('caritas-color-theme', value)
+  }
 
   useEffect(() => {
     if (!authReady) return
@@ -98,10 +124,10 @@ export default function AdminLayout({ children, userName = 'Потребител
   }
 
   return (
-    <div className="flex h-screen overflow-hidden bg-[#ecf0f5]">
+    <div className="flex h-screen overflow-hidden" style={{ background: 'var(--content-bg)' }}>
       <aside className={`flex-shrink-0 h-full flex flex-col transition-all duration-300 overflow-y-auto ${sidebarOpen ? 'w-[230px]' : 'w-0 overflow-hidden'}`}
-        style={{ background: '#222d32' }}>
-        <div className="flex items-center gap-3 px-4 py-2 border-b border-[#1a2226]" style={{ background: '#3c8dbc' }}>
+        style={{ background: 'var(--sidebar-bg)' }}>
+        <div className="flex items-center gap-3 px-4 py-2 border-b border-black/20" style={{ background: 'var(--brand-primary)' }}>
           <Link href="/admin/dashboard" className="flex items-center gap-3">
             <Image src="/logo.png" alt="Caritas Logo" width={36} height={36}
               className="rounded bg-white flex-shrink-0 object-contain" />
@@ -109,8 +135,8 @@ export default function AdminLayout({ children, userName = 'Потребител
           </Link>
         </div>
 
-        <div className="flex items-center gap-3 px-4 py-4 border-b border-[#1a2226]">
-          <div className="w-9 h-9 rounded-full bg-[#3c8dbc] flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
+        <div className="flex items-center gap-3 px-4 py-4 border-b border-black/20">
+          <div className="w-9 h-9 rounded-full flex items-center justify-center text-white font-bold text-sm flex-shrink-0" style={{ background: 'var(--brand-primary)' }}>
             {displayName.charAt(0).toUpperCase()}
           </div>
           <div className="min-w-0">
@@ -121,24 +147,25 @@ export default function AdminLayout({ children, userName = 'Потребител
           </div>
         </div>
 
-        <div className="px-4 py-2 text-[10px] font-bold uppercase tracking-widest" style={{ color: '#4b646f' }}>Администрация</div>
+        <div className="px-4 py-2 text-[10px] font-bold uppercase tracking-widest" style={{ color: 'var(--sidebar-header)' }}>Администрация</div>
         <nav className="flex-1">
           {MENU_ITEMS.filter(item => !item.adminOnly || role === 'admin').map(item => (
             <div key={item.label}>
               {item.children ? (
                 <>
                   <button onClick={() => setOpenMenus(prev => prev.includes(item.label) ? prev.filter(x => x !== item.label) : [...prev, item.label])}
-                    className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-left text-[#8aa4af] hover:bg-[#1e282c]">
+                    className="sidebar-nav-item w-full flex items-center gap-3 px-4 py-2.5 text-sm text-left"
+                    style={{ color: 'var(--sidebar-text)' }}>
                     {item.icon && <item.icon size={16} />}
                     <span className="flex-1">{item.label}</span>
                     <ChevronRight size={14} className={`transition-transform ${openMenus.includes(item.label) ? 'rotate-90' : ''}`} />
                   </button>
                   {openMenus.includes(item.label) && (
-                    <div style={{ background: '#2c3b41' }}>
+                    <div style={{ background: 'var(--sidebar-hover)' }}>
                       {item.children.map(child => (
                         <Link key={child.href} href={child.href}
                           className="flex items-center gap-3 pl-10 pr-4 py-2 text-sm"
-                          style={{ color: isActive(child.href) ? '#fff' : '#8aa4af', background: isActive(child.href) ? '#1a2226' : 'transparent' }}>
+                          style={{ color: isActive(child.href) ? '#fff' : 'var(--sidebar-text)', background: isActive(child.href) ? 'var(--sidebar-active)' : 'transparent' }}>
                           <ChevronRight size={12} /> {child.label}
                         </Link>
                       ))}
@@ -146,31 +173,49 @@ export default function AdminLayout({ children, userName = 'Потребител
                   )}
                 </>
               ) : (
-                <Link href={item.href!} className="flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-[#1e282c]"
-                  style={{ color: isActive(item.href!) ? '#fff' : '#8aa4af', background: isActive(item.href!) ? '#1a2226' : 'transparent' }}>
+                <Link href={item.href!} className="sidebar-nav-item flex items-center gap-3 px-4 py-2.5 text-sm"
+                  style={{ color: isActive(item.href!) ? '#fff' : 'var(--sidebar-text)', background: isActive(item.href!) ? 'var(--sidebar-active)' : 'transparent' }}>
                   {item.icon && <item.icon size={16} />} {item.label}
                 </Link>
               )}
             </div>
           ))}
-          <div className="border-t border-[#1a2226] my-2" />
-          <button onClick={handleLogout} className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-left text-[#8aa4af] hover:bg-[#1e282c]">
-            <LogOut size={16} /> Изход
-          </button>
         </nav>
+
+        <div className="border-t border-white/10 px-4 py-3">
+          <p className="text-[10px] uppercase tracking-wider font-bold mb-2" style={{ color: 'var(--sidebar-text)' }}>Потребители на линия</p>
+          <div className="space-y-2 max-h-28 overflow-y-auto">
+            {onlineUsers.length === 0 ? (
+              <p className="text-xs" style={{ color: 'var(--sidebar-text)' }}>Няма потребители на линия</p>
+            ) : onlineUsers.map(user => (
+              <div key={user.uid} className="flex items-center gap-2 min-w-0">
+                <span className="w-2 h-2 rounded-full bg-[#00a65a] flex-shrink-0" />
+                <span className="text-xs text-white truncate" title={user.displayName}>{user.displayName}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+        <button onClick={handleLogout} className="border-t border-white/10 w-full flex items-center gap-3 px-4 py-3 text-sm text-left hover:bg-black/10" style={{ color: 'var(--sidebar-text)' }}>
+          <LogOut size={16} /> Изход
+        </button>
       </aside>
 
       <div className="flex-1 flex flex-col overflow-hidden">
-        <header className="flex items-center justify-between px-4 h-14 flex-shrink-0 shadow-sm z-10" style={{ background: '#3c8dbc' }}>
+        <header className="flex items-center justify-between px-4 h-14 flex-shrink-0 shadow-sm z-10" style={{ background: 'var(--header-bg)' }}>
           <div className="flex items-center gap-3">
-            <button onClick={() => setSidebarOpen(v => !v)} className="text-white p-1 hover:bg-[#367fa9] rounded"><Menu size={20} /></button>
-            <Link href="/admin/dashboard" className="flex items-center gap-2 text-white font-semibold">
-              <Image src="/logo.png" alt="Caritas Logo" width={30} height={30}
-                className="rounded bg-white object-contain" />
-              <span className="hidden sm:inline">Caritas</span>
-            </Link>
+            <button onClick={() => setSidebarOpen(v => !v)} className="text-white p-1 hover:bg-black/10 rounded"><Menu size={20} /></button>
           </div>
           <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1 text-white mr-1">
+              <Palette size={17} />
+              <select value={theme} onChange={e => changeTheme(e.target.value as ColorTheme)}
+                className="bg-white/15 border border-white/30 rounded px-2 py-1 text-xs text-white focus:outline-none cursor-pointer"
+                aria-label="Цветова схема">
+                <option className="text-gray-800" value="blue">Синя</option>
+                <option className="text-gray-800" value="caritas">Каритас</option>
+                <option className="text-gray-800" value="green">Зелена</option>
+              </select>
+            </div>
             <div className="relative">
               <button onClick={() => setNotifOpen(v => !v)} className="relative text-white p-2 hover:bg-[#367fa9] rounded">
                 <Bell size={18} />

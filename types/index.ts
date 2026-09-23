@@ -128,9 +128,18 @@ export interface Employer extends OwnedRecord {
   phone?: string
   email?: string
   industry?: string
+  positions?: JobPosition[]
   notes?: string
   createdAt: string
   updatedAt: string
+}
+
+export interface JobPosition {
+  id: string
+  title: string
+  description?: string
+  skills?: string
+  isActive: boolean
 }
 
 // ---- ДОБРОВОЛЕЦ ----

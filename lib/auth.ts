@@ -22,6 +22,11 @@ export async function logout() {
   await signOut(auth)
 }
 
+export async function setOnlineStatus(isOnline: boolean) {
+  if (!auth.currentUser) return
+  await setDoc(doc(db, 'users', auth.currentUser.uid), { isOnline }, { merge: true })
+}
+
 export async function getAdminUser(uid: string): Promise<AdminUser | null> {
   const snap = await getDoc(doc(db, 'users', uid))
   if (!snap.exists()) return null

@@ -136,7 +136,15 @@ export async function getBeneficiary(id: string) {
 }
 
 export async function addBeneficiary(data: Omit<Beneficiary, 'id' | 'createdAt' | 'updatedAt'>) {
-  const numericId = `${Date.now()}${Math.floor(Math.random() * 1000).toString().padStart(3, '0')}`
+  let numericId = ''
+  for (let attempt = 0; attempt < 20; attempt++) {
+    const candidate = String(100000 + Math.floor(Math.random() * 900000))
+    if (!(await getDoc(doc(beneficiariesCol, candidate))).exists()) {
+      numericId = candidate
+      break
+    }
+  }
+  if (!numericId) throw new Error('Не може да бъде създаден свободен цифров ID')
   await setDoc(doc(beneficiariesCol, numericId), {
     ...data,
     externalId: data.externalId || numericId,
@@ -286,6 +294,15 @@ export function subscribeToNotifications(callback: (notifs: Notification[]) => v
       .sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''))
       .slice(0, 20))
   })
+}
+
+export function subscribeToOnlineUsers(callback: (users: AdminUser[]) => void, onError?: () => void) {
+  const q = query(collection(db, 'users'), where('isOnline', '==', true))
+  return onSnapshot(q, snap => {
+    callback(snap.docs
+      .map(d => ({ uid: d.id, ...d.data() } as AdminUser))
+      .sort((a, b) => a.displayName.localeCompare(b.displayName, 'bg')))
+  }, () => onError?.())
 }
 
 // ── EXPORT ────────────────────────────────────────────────────
