@@ -4,7 +4,7 @@ import { getFirestore } from 'firebase/firestore'
 import { getDatabase } from 'firebase/database'
 import { getAnalytics, isSupported } from 'firebase/analytics'
 
-const firebaseConfig = {
+export const firebaseConfig = {
   apiKey: "AIzaSyAyZJkgwGCN3AE7kbZuU_VKlAvskT1R4Wk",
   authDomain: "caritas-vitania.firebaseapp.com",
   databaseURL: "https://caritas-vitania-default-rtdb.europe-west1.firebasedatabase.app",

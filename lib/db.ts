@@ -4,9 +4,10 @@ import {
   type DocumentSnapshot, type DocumentData
 } from 'firebase/firestore'
 import { db } from './firebase'
+import { auth } from './firebase'
 import type {
   BeneficiaryRequest, Beneficiary, Task, Employer,
-  Notification, SearchParams, RequestStatus
+  Notification, SearchParams, RequestStatus, Donor, Volunteer, AdminUser
 } from '@/types'
 
 const now = () => new Date().toISOString()
@@ -14,6 +15,44 @@ const now = () => new Date().toISOString()
 function toData<T>(snap: { exists: () => boolean; id: string; data: () => Record<string, unknown> | undefined }): T | null {
   if (!snap.exists()) return null
   return { id: snap.id, ...snap.data() } as T
+}
+
+async function currentAccess() {
+  await auth.authStateReady()
+  const user = auth.currentUser
+  if (!user) throw new Error('Необходим е вход в системата')
+  const profile = await getDoc(doc(db, 'users', user.uid))
+  const data = profile.exists() ? profile.data() as Partial<AdminUser> : {}
+  return {
+    uid: user.uid,
+    name: data.displayName || user.displayName || user.email || 'Потребител',
+    role: data.role || 'user',
+    isAdmin: data.role === 'admin',
+  }
+}
+
+async function visibleCollection<T>(collectionName: string): Promise<T[]> {
+  const access = await currentAccess()
+  const ref = collection(db, collectionName)
+  if (access.isAdmin) {
+    const snap = await getDocs(ref)
+    return snap.docs.map(d => ({ id: d.id, ...d.data() } as T))
+  }
+
+  const [created, assigned] = await Promise.all([
+    getDocs(query(ref, where('createdByUid', '==', access.uid))),
+    getDocs(query(ref, where('assignedToUid', '==', access.uid))),
+  ])
+  const unique = new Map<string, T>()
+  for (const d of [...created.docs, ...assigned.docs]) {
+    unique.set(d.id, { id: d.id, ...d.data() } as T)
+  }
+  return Array.from(unique.values())
+}
+
+async function ownership() {
+  const access = await currentAccess()
+  return { createdByUid: access.uid, createdByName: access.name }
 }
 
 // ── BENEFICIARY REQUESTS ──────────────────────────────────────
@@ -25,15 +64,7 @@ export async function getRequests(params: {
   const { page = 1, perPage = 20, search } = params
 
   // Без orderBy за да избегнем нужда от composite index
-  let q = query(requestsCol)
-
-  // Прилагаме само status filter server-side (не изисква индекс)
-  if (search?.status) {
-    q = query(requestsCol, where('status', '==', search.status))
-  }
-
-  const snap = await getDocs(q)
-  let all = snap.docs.map(d => ({ id: d.id, ...d.data() } as BeneficiaryRequest))
+  let all = await visibleCollection<BeneficiaryRequest>('beneficiaryRequests')
 
   // Всички останали филтри client-side
   if (search?.id)          all = all.filter(r => r.id.includes(search.id!))
@@ -55,7 +86,7 @@ export async function getRequest(id: string) {
 }
 
 export async function addRequest(data: Omit<BeneficiaryRequest, 'id' | 'createdAt' | 'updatedAt'>) {
-  const ref = await addDoc(requestsCol, { ...data, createdAt: now(), updatedAt: now() })
+  const ref = await addDoc(requestsCol, { ...data, ...await ownership(), createdAt: now(), updatedAt: now() })
   return ref.id
 }
 
@@ -85,8 +116,8 @@ export async function updateRequestStatus(id: string, status: RequestStatus) {
 export const beneficiariesCol = collection(db, 'beneficiaries')
 
 export async function getBeneficiaries(search?: string) {
-  const snap = await getDocs(query(beneficiariesCol, orderBy('lastName', 'asc')))
-  let data = snap.docs.map(d => ({ id: d.id, ...d.data() } as Beneficiary))
+  let data = await visibleCollection<Beneficiary>('beneficiaries')
+  data.sort((a, b) => (a.lastName || '').localeCompare(b.lastName || '', 'bg'))
   if (search) {
     const s = search.toLowerCase()
     data = data.filter(b =>
@@ -105,7 +136,7 @@ export async function getBeneficiary(id: string) {
 }
 
 export async function addBeneficiary(data: Omit<Beneficiary, 'id' | 'createdAt' | 'updatedAt'>) {
-  const ref = await addDoc(beneficiariesCol, { ...data, createdAt: now(), updatedAt: now() })
+  const ref = await addDoc(beneficiariesCol, { ...data, ...await ownership(), createdAt: now(), updatedAt: now() })
   return ref.id
 }
 
@@ -121,12 +152,12 @@ export async function deleteBeneficiary(id: string) {
 export const tasksCol = collection(db, 'tasks')
 
 export async function getTasks() {
-  const snap = await getDocs(query(tasksCol, orderBy('createdAt', 'desc')))
-  return snap.docs.map(d => ({ id: d.id, ...d.data() } as Task))
+  const data = await visibleCollection<Task>('tasks')
+  return data.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''))
 }
 
 export async function addTask(data: Omit<Task, 'id' | 'createdAt' | 'updatedAt'>) {
-  const ref = await addDoc(tasksCol, { ...data, createdAt: now(), updatedAt: now() })
+  const ref = await addDoc(tasksCol, { ...data, ...await ownership(), createdAt: now(), updatedAt: now() })
   return ref.id
 }
 
@@ -142,8 +173,8 @@ export async function deleteTask(id: string) {
 export const employersCol = collection(db, 'employers')
 
 export async function getEmployers(search?: string) {
-  const snap = await getDocs(query(employersCol, orderBy('name', 'asc')))
-  let data = snap.docs.map(d => ({ id: d.id, ...d.data() } as Employer))
+  let data = await visibleCollection<Employer>('employers')
+  data.sort((a, b) => (a.name || '').localeCompare(b.name || '', 'bg'))
   if (search) {
     const s = search.toLowerCase()
     data = data.filter(e =>
@@ -156,7 +187,7 @@ export async function getEmployers(search?: string) {
 }
 
 export async function addEmployer(data: Omit<Employer, 'id' | 'createdAt' | 'updatedAt'>) {
-  const ref = await addDoc(employersCol, { ...data, createdAt: now(), updatedAt: now() })
+  const ref = await addDoc(employersCol, { ...data, ...await ownership(), createdAt: now(), updatedAt: now() })
   return ref.id
 }
 
@@ -168,18 +199,63 @@ export async function deleteEmployer(id: string) {
   await deleteDoc(doc(employersCol, id))
 }
 
+// ── VOLUNTEERS ────────────────────────────────────────────────
+export const volunteersCol = collection(db, 'volunteers')
+
+export async function getVolunteers() {
+  const data = await visibleCollection<Volunteer>('volunteers')
+  return data.sort((a, b) => `${a.lastName} ${a.firstName}`.localeCompare(`${b.lastName} ${b.firstName}`, 'bg'))
+}
+
+export async function addVolunteer(data: Omit<Volunteer, 'id' | 'createdAt' | 'updatedAt'>) {
+  const ref = await addDoc(volunteersCol, { ...data, ...await ownership(), createdAt: now(), updatedAt: now() })
+  return ref.id
+}
+
+export async function updateVolunteer(id: string, data: Partial<Volunteer>) {
+  await updateDoc(doc(volunteersCol, id), { ...data, updatedAt: now() })
+}
+
+export async function deleteVolunteer(id: string) {
+  await deleteDoc(doc(volunteersCol, id))
+}
+
+// ── DONORS ────────────────────────────────────────────────────
+export const donorsCol = collection(db, 'donors')
+
+export async function getDonors() {
+  const data = await visibleCollection<Donor>('donors')
+  return data.sort((a, b) => {
+    const an = a.entityType === 'Юридическо лице' ? a.organizationName : `${a.firstName} ${a.lastName}`
+    const bn = b.entityType === 'Юридическо лице' ? b.organizationName : `${b.firstName} ${b.lastName}`
+    return (an || '').localeCompare(bn || '', 'bg')
+  })
+}
+
+export async function addDonor(data: Omit<Donor, 'id' | 'createdAt' | 'updatedAt'>) {
+  const ref = await addDoc(donorsCol, { ...data, ...await ownership(), createdAt: now(), updatedAt: now() })
+  return ref.id
+}
+
+export async function updateDonor(id: string, data: Partial<Donor>) {
+  await updateDoc(doc(donorsCol, id), { ...data, updatedAt: now() })
+}
+
+export async function deleteDonor(id: string) {
+  await deleteDoc(doc(donorsCol, id))
+}
+
 // ── NOTIFICATIONS ─────────────────────────────────────────────
 export const notificationsCol = collection(db, 'notifications')
 
 export async function getNotifications(unreadOnly = false) {
-  let q = query(notificationsCol, orderBy('createdAt', 'desc'), limit(50))
-  if (unreadOnly) q = query(q, where('isRead', '==', false))
-  const snap = await getDocs(q)
-  return snap.docs.map(d => ({ id: d.id, ...d.data() } as Notification))
+  let data = await visibleCollection<Notification>('notifications')
+  if (unreadOnly) data = data.filter(item => !item.isRead)
+  return data.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || '')).slice(0, 50)
 }
 
 export async function addNotification(data: Omit<Notification, 'id' | 'createdAt'>) {
-  await addDoc(notificationsCol, { ...data, createdAt: now() })
+  await addDoc(notificationsCol, { ...data, ...await ownership(), createdAt: now() })
 }
 
 export async function markNotificationRead(id: string) {
@@ -187,23 +263,27 @@ export async function markNotificationRead(id: string) {
 }
 
 export async function markAllNotificationsRead() {
-  const snap = await getDocs(query(notificationsCol, where('isRead', '==', false)))
+  const visible = await getNotifications(true)
   const batch = writeBatch(db)
-  snap.docs.forEach(d => batch.update(d.ref, { isRead: true }))
+  visible.forEach(item => batch.update(doc(notificationsCol, item.id), { isRead: true }))
   await batch.commit()
 }
 
 export function subscribeToNotifications(callback: (notifs: Notification[]) => void) {
-  const q = query(notificationsCol, orderBy('createdAt', 'desc'), limit(20))
+  const uid = auth.currentUser?.uid
+  if (!uid) return () => {}
+  const q = query(notificationsCol, where('createdByUid', '==', uid), limit(50))
   return onSnapshot(q, snap => {
-    callback(snap.docs.map(d => ({ id: d.id, ...d.data() } as Notification)))
+    callback(snap.docs
+      .map(d => ({ id: d.id, ...d.data() } as Notification))
+      .sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''))
+      .slice(0, 20))
   })
 }
 
 // ── EXPORT ────────────────────────────────────────────────────
 export async function getExportData(dateFrom?: string, dateTo?: string) {
-  const snap = await getDocs(query(requestsCol, orderBy('createdAt', 'desc')))
-  let data = snap.docs.map(d => ({ id: d.id, ...d.data() } as BeneficiaryRequest))
+  let data = await visibleCollection<BeneficiaryRequest>('beneficiaryRequests')
   if (dateFrom) data = data.filter(r => r.createdAt >= dateFrom)
   if (dateTo)   data = data.filter(r => r.createdAt <= dateTo)
   return data
@@ -211,22 +291,24 @@ export async function getExportData(dateFrom?: string, dateTo?: string) {
 
 // ── DASHBOARD STATS ───────────────────────────────────────────
 export async function getDashboardStats() {
-  const [reqSnap, benSnap, taskSnap, empSnap] = await Promise.all([
-    getDocs(requestsCol),
-    getDocs(beneficiariesCol),
-    getDocs(tasksCol),
-    getDocs(employersCol),
+  const [requests, beneficiaries, tasks, employers, volunteers, donors] = await Promise.all([
+    visibleCollection<BeneficiaryRequest>('beneficiaryRequests'),
+    visibleCollection<Beneficiary>('beneficiaries'),
+    visibleCollection<Task>('tasks'),
+    visibleCollection<Employer>('employers'),
+    visibleCollection<Volunteer>('volunteers'),
+    visibleCollection<Donor>('donors'),
   ])
-
-  const requests = reqSnap.docs.map(d => d.data() as BeneficiaryRequest)
 
   return {
     totalRequests:      requests.length,
     confirmedRequests:  requests.filter(r => r.status === 'Потвърдено').length,
     pendingRequests:    requests.filter(r => r.status === 'Чакащ').length,
     rejectedRequests:   requests.filter(r => r.status === 'Отхвърлено').length,
-    totalBeneficiaries: benSnap.size,
-    totalTasks:         taskSnap.size,
-    totalEmployers:     empSnap.size,
+    totalBeneficiaries: beneficiaries.length,
+    totalTasks:         tasks.length,
+    totalEmployers:     employers.length,
+    totalVolunteers:    volunteers.length,
+    totalDonors:        donors.length,
   }
 }

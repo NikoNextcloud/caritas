@@ -124,6 +124,8 @@ export default function RequestsPage() {
     ? data.filter(r =>
         r.beneficiaryName?.toLowerCase().includes(quickSearch.toLowerCase()) ||
         r.activity?.toLowerCase().includes(quickSearch.toLowerCase()) ||
+        r.operator?.toLowerCase().includes(quickSearch.toLowerCase()) ||
+        r.requestType?.toLowerCase().includes(quickSearch.toLowerCase()) ||
         String(r.id).includes(quickSearch)
       )
     : data
@@ -140,6 +142,9 @@ export default function RequestsPage() {
       )
     },
     { key: 'message', label: 'Съобщение', width: '90px' },
+    { key: 'requestType', label: 'Тип' },
+    { key: 'operator', label: 'От потребител' },
+    { key: 'vulnerability', label: 'Уязвимост' },
     {
       key: 'case1', label: 'Case 1',
       render: (r: BeneficiaryRequest) => r.case1 ? (
@@ -187,7 +192,7 @@ export default function RequestsPage() {
   ]
 
   return (
-    <AdminLayout userName="Никол Траянова">
+    <AdminLayout>
       <Toaster position="top-right" />
 
       <div className="flex items-center gap-2 text-sm text-gray-500 mb-4">
@@ -276,6 +281,31 @@ export default function RequestsPage() {
                 onChange={e => setEditing(v => ({ ...v, status: e.target.value as RequestStatus }))}>
                 {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
               </select>
+            </div>
+            <div className="form-group">
+              <label className="form-label">Тип</label>
+              <input type="text" className="form-control" value={editing.requestType ?? ''}
+                onChange={e => setEditing(v => ({ ...v, requestType: e.target.value }))} />
+            </div>
+            <div className="form-group">
+              <label className="form-label">От потребител</label>
+              <input type="text" className="form-control" value={editing.operator ?? ''}
+                onChange={e => setEditing(v => ({ ...v, operator: e.target.value }))} />
+            </div>
+            <div className="form-group">
+              <label className="form-label">Тагове</label>
+              <input type="text" className="form-control" value={editing.tags ?? ''}
+                onChange={e => setEditing(v => ({ ...v, tags: e.target.value }))} />
+            </div>
+            <div className="form-group">
+              <label className="form-label">Уязвимост</label>
+              <input type="text" className="form-control" value={editing.vulnerability ?? ''}
+                onChange={e => setEditing(v => ({ ...v, vulnerability: e.target.value }))} />
+            </div>
+            <div className="form-group md:col-span-2">
+              <label className="form-label">Коментар</label>
+              <textarea className="form-control" rows={2} value={editing.comment ?? ''}
+                onChange={e => setEditing(v => ({ ...v, comment: e.target.value }))} />
             </div>
           </div>
 

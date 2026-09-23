@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react'
 import AdminLayout from '@/components/layout/AdminLayout'
 import { getDashboardStats } from '@/lib/db'
-import { Users, CheckSquare, Briefcase, FileText, Clock, CheckCircle, XCircle } from 'lucide-react'
+import { Users, CheckSquare, Briefcase, FileText, Clock, CheckCircle, XCircle, HeartHandshake, HandHeart } from 'lucide-react'
 import Link from 'next/link'
 
 interface Stats {
@@ -13,6 +13,8 @@ interface Stats {
   totalBeneficiaries: number
   totalTasks: number
   totalEmployers: number
+  totalVolunteers: number
+  totalDonors: number
 }
 
 function StatCard({ label, value, icon: Icon, color, href }: {
@@ -43,7 +45,7 @@ export default function DashboardPage() {
   }, [])
 
   return (
-    <AdminLayout userName="Никол Траянова">
+    <AdminLayout>
       {/* Breadcrumb */}
       <div className="flex items-center gap-2 text-sm text-gray-500 mb-4">
         <span>Начало</span>
@@ -69,10 +71,12 @@ export default function DashboardPage() {
             <StatCard label="Отхвърлени"        value={stats.rejectedRequests}   icon={XCircle}     color="#dd4b39" href="/admin/requests?status=Отхвърлено" />
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
             <StatCard label="Бенефициенти"     value={stats.totalBeneficiaries} icon={Users}       color="#3c8dbc" href="/admin/beneficiaries" />
             <StatCard label="Задачи"            value={stats.totalTasks}         icon={CheckSquare} color="#00c0ef" href="/admin/tasks" />
             <StatCard label="Работодатели"      value={stats.totalEmployers}     icon={Briefcase}   color="#605ca8" href="/admin/employers" />
+            <StatCard label="Доброволци"        value={stats.totalVolunteers}    icon={HeartHandshake} color="#00a65a" href="/admin/volunteers" />
+            <StatCard label="Дарители"          value={stats.totalDonors}        icon={HandHeart}    color="#dd4b39" href="/admin/donors" />
           </div>
 
           {/* Quick links */}
@@ -85,6 +89,8 @@ export default function DashboardPage() {
               <Link href="/admin/beneficiaries?add=1" className="btn-success">+ Нов бенефициент</Link>
               <Link href="/admin/tasks?add=1"         className="btn-warning">+ Нова задача</Link>
               <Link href="/admin/employers?add=1"     className="btn-default">+ Нов работодател</Link>
+              <Link href="/admin/volunteers?add=1"    className="btn-default">+ Нов доброволец</Link>
+              <Link href="/admin/donors?add=1"        className="btn-default">+ Нов дарител</Link>
               <Link href="/admin/export"              className="btn-default">↓ Експорт</Link>
             </div>
           </div>

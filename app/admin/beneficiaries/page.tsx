@@ -8,7 +8,11 @@ import type { Beneficiary } from '@/types'
 import { Plus, Search } from 'lucide-react'
 import toast, { Toaster } from 'react-hot-toast'
 
-const EMPTY: Partial<Beneficiary> = { firstName: '', lastName: '', email: '', phone: '', city: '', address: '' }
+const EMPTY: Partial<Beneficiary> = {
+  firstName: '', lastName: '', middleName: '', gender: '', birthDate: '', country: '', egn: '',
+  status: '', email: '', phone: '', city: '', address: '', currentAddress: '', mentor: '',
+  requestedHelp: '', education: '', vulnerability: '', notes: '',
+}
 
 export default function BeneficiariesPage() {
   const [data, setData] = useState<Beneficiary[]>([])
@@ -31,6 +35,8 @@ export default function BeneficiariesPage() {
   const filtered = query
     ? data.filter(b =>
         `${b.firstName} ${b.lastName}`.toLowerCase().includes(query.toLowerCase()) ||
+        b.middleName?.toLowerCase().includes(query.toLowerCase()) ||
+        b.egn?.includes(query) ||
         b.email?.toLowerCase().includes(query.toLowerCase()) ||
         b.phone?.includes(query)
       )
@@ -66,6 +72,10 @@ export default function BeneficiariesPage() {
     { key: 'id', label: 'Id', width: '80px' },
     { key: 'firstName', label: 'Първо Име' },
     { key: 'lastName', label: 'Фамилия' },
+    { key: 'middleName', label: 'Бащино име' },
+    { key: 'egn', label: 'ЕГН' },
+    { key: 'status', label: 'Статут' },
+    { key: 'country', label: 'Държава' },
     { key: 'email', label: 'Имейл' },
     { key: 'phone', label: 'Телефон' },
     { key: 'city', label: 'Град' },
@@ -73,7 +83,7 @@ export default function BeneficiariesPage() {
   ]
 
   return (
-    <AdminLayout userName="Никол Траянова">
+    <AdminLayout>
       <Toaster position="top-right" />
       <div className="flex items-center gap-2 text-sm text-gray-500 mb-4">
         <span>Начало</span><span>/</span>
@@ -86,7 +96,7 @@ export default function BeneficiariesPage() {
         <div className="box-body">
           <div className="flex items-center gap-2 mb-4">
             <div className="flex items-center gap-2 flex-1">
-              <input type="text" placeholder="Търси по имена, имейл, телефон..."
+              <input type="text" placeholder="Търси по имена, ЕГН, имейл или телефон..."
                 className="form-control max-w-xs" value={query}
                 onChange={e => setQuery(e.target.value)} />
               <Search size={16} className="text-gray-400" />
@@ -116,6 +126,31 @@ export default function BeneficiariesPage() {
               onChange={e => setEditing(v => ({ ...v, lastName: e.target.value }))} />
           </div>
           <div className="form-group">
+            <label className="form-label">Бащино име</label>
+            <input type="text" className="form-control" value={editing.middleName ?? ''}
+              onChange={e => setEditing(v => ({ ...v, middleName: e.target.value }))} />
+          </div>
+          <div className="form-group">
+            <label className="form-label">Пол</label>
+            <input type="text" className="form-control" value={editing.gender ?? ''}
+              onChange={e => setEditing(v => ({ ...v, gender: e.target.value }))} />
+          </div>
+          <div className="form-group">
+            <label className="form-label">ЕГН</label>
+            <input type="text" className="form-control" value={editing.egn ?? ''}
+              onChange={e => setEditing(v => ({ ...v, egn: e.target.value }))} />
+          </div>
+          <div className="form-group">
+            <label className="form-label">Статут</label>
+            <input type="text" className="form-control" value={editing.status ?? ''}
+              onChange={e => setEditing(v => ({ ...v, status: e.target.value }))} />
+          </div>
+          <div className="form-group">
+            <label className="form-label">Държава на раждане</label>
+            <input type="text" className="form-control" value={editing.country ?? ''}
+              onChange={e => setEditing(v => ({ ...v, country: e.target.value }))} />
+          </div>
+          <div className="form-group">
             <label className="form-label">Имейл</label>
             <input type="email" className="form-control"
               value={editing.email ?? ''}
@@ -139,11 +174,36 @@ export default function BeneficiariesPage() {
               value={editing.address ?? ''}
               onChange={e => setEditing(v => ({ ...v, address: e.target.value }))} />
           </div>
+          <div className="form-group">
+            <label className="form-label">Настоящ адрес</label>
+            <input type="text" className="form-control" value={editing.currentAddress ?? ''}
+              onChange={e => setEditing(v => ({ ...v, currentAddress: e.target.value }))} />
+          </div>
+          <div className="form-group">
+            <label className="form-label">Ментор</label>
+            <input type="text" className="form-control" value={editing.mentor ?? ''}
+              onChange={e => setEditing(v => ({ ...v, mentor: e.target.value }))} />
+          </div>
           <div className="form-group md:col-span-2">
             <label className="form-label">Дата на раждане</label>
             <input type="date" className="form-control"
               value={editing.birthDate ?? ''}
               onChange={e => setEditing(v => ({ ...v, birthDate: e.target.value }))} />
+          </div>
+          <div className="form-group md:col-span-2">
+            <label className="form-label">Поискана помощ</label>
+            <textarea className="form-control resize-none" rows={2} value={editing.requestedHelp ?? ''}
+              onChange={e => setEditing(v => ({ ...v, requestedHelp: e.target.value }))} />
+          </div>
+          <div className="form-group">
+            <label className="form-label">Образование</label>
+            <input type="text" className="form-control" value={editing.education ?? ''}
+              onChange={e => setEditing(v => ({ ...v, education: e.target.value }))} />
+          </div>
+          <div className="form-group">
+            <label className="form-label">Уязвимост</label>
+            <input type="text" className="form-control" value={editing.vulnerability ?? ''}
+              onChange={e => setEditing(v => ({ ...v, vulnerability: e.target.value }))} />
           </div>
           <div className="form-group md:col-span-2">
             <label className="form-label">Бележки</label>

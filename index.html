@@ -543,11 +543,6 @@ textarea.form-control { resize: vertical; min-height: 80px; }
     Export
   </button>
 
-  <button class="nav-item" onclick="showPage('epay',this)">
-    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"/></svg>
-    Export EPAY
-  </button>
-
   <div class="sidebar-section" style="margin-top:auto">Потребител</div>
 
   <div class="sidebar-footer">
@@ -1034,28 +1029,6 @@ textarea.form-control { resize: vertical; min-height: 80px; }
       </div>
     </div>
 
-    <!-- ═══════════════ PAGE: EPAY ═══════════════ -->
-    <div class="page" id="page-epay">
-      <div class="page-header">
-        <div class="page-title"><h1>Export EPAY</h1><p>Генериране на EPAY файл за плащания</p></div>
-      </div>
-      <div class="card" style="max-width:500px">
-        <div class="card-title">💳 EPAY Конфигурация</div>
-        <div style="display:flex;flex-direction:column;gap:12px">
-          <div class="form-group"><label class="form-label">Месец</label>
-            <select class="form-control"><option>Септември 2026</option><option>Август 2026</option><option>Юли 2026</option></select>
-          </div>
-          <div class="form-group"><label class="form-label">Тип плащане</label>
-            <select class="form-control"><option>Социални помощи</option><option>Стипендии</option><option>Еднократни</option></select>
-          </div>
-          <div class="form-group"><label class="form-label">Сума (лв.)</label><input type="number" class="form-control" placeholder="0.00"></div>
-          <button class="btn btn-primary" onclick="showToast('EPAY файлът е генериран успешно','#22c55e')">
-            <svg width="13" height="13" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
-            Генерирай EPAY файл
-          </button>
-        </div>
-      </div>
-    </div>
   </main>
 </div>
 
@@ -1297,7 +1270,7 @@ renderRequests(requestsData);
 const pageNames = {
   dashboard:'Основно табло', tasks:'Списък Задачи',
   beneficiaries:'Бенефициенти', requests:'Заявки за Дейности',
-  employers:'Работодатели', export:'Export', epay:'Export EPAY'
+  employers:'Работодатели', export:'Export'
 };
 
 function showPage(id, btn) {

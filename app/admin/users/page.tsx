@@ -5,8 +5,9 @@ import Modal from '@/components/ui/Modal'
 import {
   collection, getDocs, doc, setDoc, updateDoc, deleteDoc
 } from 'firebase/firestore'
-import { createUserWithEmailAndPassword } from 'firebase/auth'
-import { db, auth } from '@/lib/firebase'
+import { createUserWithEmailAndPassword, getAuth, signOut } from 'firebase/auth'
+import { deleteApp, initializeApp } from 'firebase/app'
+import { db, firebaseConfig } from '@/lib/firebase'
 import type { UserRole } from '@/types'
 import { Plus, Shield } from 'lucide-react'
 import toast, { Toaster } from 'react-hot-toast'
@@ -22,19 +23,14 @@ interface AdminUserRow {
   createdAt: string
 }
 
-const ROLES: UserRole[] = ['admin', 'operator', 'viewer']
+const ROLES: UserRole[] = ['admin', 'user']
 const roleLabel: Record<UserRole, string> = {
   admin:    'Администратор',
+  user:     'Потребител',
   operator: 'Оператор',
   viewer:   'Преглед',
 }
-const roleBadge: Record<UserRole, string> = {
-  admin:    'bg-[#dd4b39]',
-  operator: 'bg-[#f39c12]',
-  viewer:   'bg-[#00c0ef]',
-}
-
-const EMPTY = { email: '', displayName: '', role: 'operator' as UserRole, password: '' }
+const EMPTY = { email: '', displayName: '', role: 'user' as UserRole, password: '' }
 
 export default function UsersPage() {
   const [users, setUsers] = useState<AdminUserRow[]>([])
@@ -65,7 +61,9 @@ export default function UsersPage() {
     }
     setSaving(true)
     try {
-      const cred = await createUserWithEmailAndPassword(auth, form.email, form.password)
+      const secondaryApp = initializeApp(firebaseConfig, `create-user-${Date.now()}`)
+      const secondaryAuth = getAuth(secondaryApp)
+      const cred = await createUserWithEmailAndPassword(secondaryAuth, form.email, form.password)
       await setDoc(doc(db, 'users', cred.user.uid), {
         email: form.email,
         displayName: form.displayName,
@@ -73,6 +71,8 @@ export default function UsersPage() {
         isOnline: false,
         createdAt: new Date().toISOString(),
       })
+      await signOut(secondaryAuth)
+      await deleteApp(secondaryApp)
       toast.success('Потребителят е създаден!')
       setModal(false)
       setForm(EMPTY)
@@ -117,7 +117,7 @@ export default function UsersPage() {
   }
 
   return (
-    <AdminLayout userName="Никол Траянова">
+    <AdminLayout>
       <Toaster position="top-right" />
       <div className="flex items-center gap-2 text-sm text-gray-500 mb-4">
         <span>Начало</span><span>/</span>
@@ -135,7 +135,7 @@ export default function UsersPage() {
         </div>
         <div className="box-body">
           <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded text-sm text-blue-700">
-            <strong>Роли:</strong> Администратор — пълен достъп · Оператор — добавяне/редакция · Преглед — само четене
+            <strong>Роли:</strong> Администратор — вижда и управлява всичко · Потребител — вижда само създадените от него или възложените му записи
           </div>
 
           {/* Bulk delete bar */}

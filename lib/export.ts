@@ -29,19 +29,6 @@ export function exportToCSV(data: BeneficiaryRequest[], filename = 'export') {
   downloadFile(`${filename}.csv`, csvContent, 'text/csv;charset=utf-8;')
 }
 
-// ---- EPAY Export (специфичен формат) ----
-export function exportToEPAY(data: BeneficiaryRequest[], filename = 'epay_export') {
-  const lines = [
-    'MIN=0000000000',
-    'EMAIL=caritas@example.com',
-    '',
-    ...data.map((r, i) =>
-      `INVOICE=${String(i + 1).padStart(10, '0')}\nAMOUNT=0.00\nEXP_TIME=20301231\nDESCR=${r.beneficiaryName} - ${r.activity}`
-    )
-  ]
-  downloadFile(`${filename}.txt`, lines.join('\n'), 'text/plain;charset=utf-8;')
-}
-
 // ---- Helpers ----
 function formatCase(c: { date?: string; operator?: string; description?: string } | undefined): string {
   if (!c) return ''

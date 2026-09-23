@@ -23,7 +23,7 @@ export default function ExportPage() {
   }
 
   return (
-    <AdminLayout userName="Никол Траянова">
+    <AdminLayout>
       <Toaster position="top-right" />
       <div className="flex items-center gap-2 text-sm text-gray-500 mb-4">
         <span>Начало</span><span>/</span>

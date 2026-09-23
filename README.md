@@ -73,7 +73,8 @@ Vercel автоматично чете .env.local при деплой.
 | Бенефициенти | /admin/beneficiaries |
 | Задачи | /admin/tasks |
 | Работодатели | /admin/employers |
+| Доброволци | /admin/volunteers |
+| Дарители | /admin/donors |
 | Export CSV | /admin/export |
-| Export EPAY | /admin/export-epay |
 | Потребители | /admin/users |
 | Нотификации | /admin/notifications |
