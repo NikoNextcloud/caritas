@@ -2,9 +2,7 @@
 import { useState, useRef, useCallback } from 'react'
 import AdminLayout from '@/components/layout/AdminLayout'
 import { db } from '@/lib/firebase'
-import {
-  collection, doc, setDoc, writeBatch, getDocs, query, where
-} from 'firebase/firestore'
+import { collection, doc, writeBatch, getDocs, query, where } from 'firebase/firestore'
 import {
   Upload, FileSpreadsheet, CheckCircle, XCircle,
   AlertTriangle, ChevronDown, ChevronUp, RefreshCw
@@ -12,8 +10,8 @@ import {
 import toast, { Toaster } from 'react-hot-toast'
 import * as XLSX from 'xlsx'
 
-// ── Типове ──────────────────────────────────────────────────
-interface ImportRow { [key: string]: string | number | null }
+// ── Типове ──────────────────────────────────────────────────────
+type RawRow = (string | number | null)[]
 
 interface ImportResult {
   total: number
@@ -25,113 +23,178 @@ interface ImportResult {
 interface SheetPreview {
   name: string
   headers: string[]
-  rows: ImportRow[]
+  rows: RawRow[]
   totalRows: number
   type: 'beneficiaries' | 'requests' | 'unknown'
 }
 
-// ── Mapping на колони от XLSX към Firestore ──────────────────
-function detectSheetType(headers: string[]): SheetPreview['type'] {
+// ── Helpers ──────────────────────────────────────────────────────
+function str(v: string | number | null | undefined): string {
+  if (v === null || v === undefined) return ''
+  return String(v).trim()
+}
+
+function num(v: string | number | null | undefined): number | null {
+  if (v === null || v === undefined || v === '') return null
+  const n = Number(v)
+  return isNaN(n) ? null : n
+}
+
+function detectType(headers: string[]): SheetPreview['type'] {
   const h = headers.map(x => String(x).toLowerCase())
-  if (h.includes('egn') || h.includes('phone number') || h.includes('gdpr')) return 'beneficiaries'
-  if (h.some(x => x.includes('случай') || x.includes('заявка id') || x.includes('заглавие'))) return 'requests'
+  if (h.includes('egn') || h.includes('phone number')) return 'beneficiaries'
+  if (h.some(x => x.includes('случай') || x.includes('заявка id'))) return 'requests'
   return 'unknown'
 }
 
-function mapBeneficiary(row: ImportRow, headers: string[]) {
-  const get = (key: string) => {
-    const idx = headers.findIndex(h =>
-      h.toLowerCase() === key.toLowerCase() ||
-      h.toLowerCase().includes(key.toLowerCase())
-    )
-    return idx >= 0 ? String(row[headers[idx]] ?? '').trim() : ''
-  }
+// ── Mapper: Beneficients sheet → Firestore beneficiaries ─────────
+// Точни имена от Excel:
+// ID | Created | First Name | Last Name | Midle Name | Gender |
+// Date of birth | Country of birth | EGN | GDPR | Phone number |
+// Status | Mentor | Address | Current Address | Email |
+// Requested help | Education | Has Document | Experience |
+// Initial Income | Current Income | Case Description |
+// Work Experiance | Family status | Number of Kids | Vulnerability | Last Edited
+
+function mapBeneficiary(row: RawRow, headers: string[]) {
+  const h = headers
+  const g = (name: string) => str(row[h.indexOf(name)])
+  const n = (name: string) => num(row[h.indexOf(name)])
+
+  const id = n('ID') // числово ID от старата база
 
   return {
-    externalId: String(get('ID') || get('id') || ''),
-    firstName:  get('First Name'),
-    lastName:   get('Last Name'),
-    middleName: get('Midle Name') || get('Middle Name'),
-    gender:     get('Gender'),
-    birthDate:  get('Date of birth'),
-    country:    get('Country of birth'),
-    egn:        get('EGN'),
-    status:     get('Status'),
-    phone:      get('Phone number'),
-    email:      get('Email'),
-    address:    get('Address'),
-    currentAddress: get('Current Address'),
-    familyStatus:   get('Family status'),
-    numberOfKids:   get('Number of Kids'),
-    vulnerability:  get('Vulnerability'),
-    education:      get('Education'),
-    notes:          get('Case Description'),
-    createdAt:  get('Created') || new Date().toISOString(),
-    updatedAt:  new Date().toISOString(),
-    importedAt: new Date().toISOString(),
-    source:     'import',
-  }
-}
-
-function mapRequest(row: ImportRow, headers: string[]) {
-  const get = (key: string) => {
-    const idx = headers.findIndex(h =>
-      h.toLowerCase() === key.toLowerCase() ||
-      h.toLowerCase().includes(key.toLowerCase())
-    )
-    return idx >= 0 ? String(row[headers[idx]] ?? '').trim() : ''
-  }
-
-  const parseCase = (raw: string) => {
-    if (!raw || raw === 'None' || raw === '') return undefined
-    // Формат: "31.08.2026 - Николета - Описание..."
-    const parts = raw.split(' - ')
-    return {
-      date: parts[0]?.trim() ?? '',
-      operator: parts[1]?.trim() ?? '',
-      description: parts.slice(2).join(' - ').trim(),
-    }
-  }
-
-  return {
-    externalId:      get('Заявка ID') || get('ID'),
-    activity:        get('Заглавие'),
-    message:         get('Описание'),
-    type:            get('Тип'),
-    comment:         get('Коментар'),
-    tags:            get('Тагове'),
-    case1:           parseCase(get('Случай 1')),
-    case2:           parseCase(get('Случай 2')),
-    case3:           parseCase(get('Случай 3')),
-    case4:           parseCase(get('Случай 4')),
-    case5:           parseCase(get('Случай 5')),
-    case6:           parseCase(get('Случай 6')),
-    beneficiaryId:   get('ID на бенефициента'),
-    beneficiaryName: get('Бенефициент'),
-    operator:        get('От Потребител'),
-    status:          'Потвърдено' as const,
-    createdAt:       get('Създаване') || new Date().toISOString(),
+    id:              id ? String(id) : null,   // ще се използва като document ID
+    externalId:      id,
+    firstName:       g('First Name'),
+    lastName:        g('Last Name'),
+    middleName:      g('Midle Name'),
+    gender:          g('Gender'),
+    birthDate:       g('Date of birth'),
+    country:         g('Country of birth'),
+    egn:             str(row[h.indexOf('EGN')]),
+    gdpr:            g('GDPR'),
+    phone:           str(row[h.indexOf('Phone number')]),
+    status:          g('Status'),
+    mentor:          g('Mentor'),
+    address:         g('Address'),
+    currentAddress:  g('Current Address'),
+    email:           g('Email'),
+    requestedHelp:   g('Requested help'),
+    education:       g('Education'),
+    hasDocument:     g('Has Document'),
+    experience:      g('Experience'),
+    initialIncome:   g('Initial Income'),
+    currentIncome:   g('Current Income'),
+    caseDescription: g('Case Description'),
+    workExperience:  g('Work Experiance'),
+    familyStatus:    g('Family status'),
+    numberOfKids:    g('Number of Kids'),
+    vulnerability:   g('Vulnerability'),
+    createdAt:       g('Created') || new Date().toISOString(),
+    lastEdited:      g('Last Edited'),
     updatedAt:       new Date().toISOString(),
     importedAt:      new Date().toISOString(),
     source:          'import',
   }
 }
 
-// ── Firestore import функции ──────────────────────────────────
+// ── Mapper: Beneficients Data sheet → Firestore beneficiaryRequests ──
+// Точни имена от Excel:
+// ID на бенефициента | First Name | Last Name | Midle Name | Gender |
+// Date of birth | Country of birth | EGN | Status | ID |
+// Създаване | Заглавие | Тип | Описание | Тагове | Коментар |
+// Случай 1..6 | Бенефициент | От Потребител | Заявка ID |
+// Vulnerability | Задача ID | Задача за
+
+function parseCase(raw: string | number | null) {
+  const s = str(raw)
+  if (!s || s === 'None') return undefined
+  // Формат: "31.08.2026 - Николета - Описание..."
+  const dashIdx = s.indexOf(' - ')
+  if (dashIdx < 0) return { date: '', operator: '', description: s }
+  const date = s.slice(0, dashIdx).trim()
+  const rest = s.slice(dashIdx + 3)
+  const dash2 = rest.indexOf(' - ')
+  if (dash2 < 0) return { date, operator: rest.trim(), description: '' }
+  return {
+    date,
+    operator: rest.slice(0, dash2).trim(),
+    description: rest.slice(dash2 + 3).trim(),
+  }
+}
+
+function mapRequest(row: RawRow, headers: string[]) {
+  const h = headers
+  const g = (name: string) => str(row[h.indexOf(name)])
+  const n = (name: string) => num(row[h.indexOf(name)])
+
+  const requestId = n('Заявка ID') || n('ID')
+  const benefId   = n('ID на бенефициента')
+
+  const c1 = parseCase(row[h.indexOf('Случай 1')])
+  const c2 = parseCase(row[h.indexOf('Случай 2')])
+  const c3 = parseCase(row[h.indexOf('Случай 3')])
+  const c4 = parseCase(row[h.indexOf('Случай 4')])
+  const c5 = parseCase(row[h.indexOf('Случай 5')])
+  const c6 = parseCase(row[h.indexOf('Случай 6')])
+
+  const obj: Record<string, unknown> = {
+    id:              requestId ? String(requestId) : null,
+    externalId:      requestId,
+    beneficiaryId:   benefId ? String(benefId) : '',
+    beneficiaryName: g('Бенефициент'),
+    firstName:       g('First Name'),
+    lastName:        g('Last Name'),
+    middleName:      g('Midle Name'),
+    gender:          g('Gender'),
+    birthDate:       g('Date of birth'),
+    country:         g('Country of birth'),
+    egn:             str(row[h.indexOf('EGN')]),
+    benefStatus:     g('Status'),
+    activity:        g('Заглавие'),
+    type:            g('Тип'),
+    message:         g('Описание'),
+    tags:            g('Тагове'),
+    comment:         g('Коментар'),
+    operator:        g('От Потребител'),
+    vulnerability:   g('Vulnerability'),
+    taskId:          n('Задача ID'),
+    taskFor:         g('Задача за'),
+    status:          'Потвърдено',
+    createdAt:       g('Създаване') || new Date().toISOString(),
+    updatedAt:       new Date().toISOString(),
+    importedAt:      new Date().toISOString(),
+    source:          'import',
+  }
+
+  // Добавяме само непразните cases
+  if (c1) obj.case1 = c1
+  if (c2) obj.case2 = c2
+  if (c3) obj.case3 = c3
+  if (c4) obj.case4 = c4
+  if (c5) obj.case5 = c5
+  if (c6) obj.case6 = c6
+
+  // Изчистваме празни стойности
+  return Object.fromEntries(
+    Object.entries(obj).filter(([, v]) => v !== null && v !== '' && v !== undefined)
+  )
+}
+
+// ── Firestore import ──────────────────────────────────────────────
 async function importBeneficiaries(
-  rows: ImportRow[],
+  rows: RawRow[],
   headers: string[],
   onProgress: (n: number) => void
 ): Promise<ImportResult> {
   const result: ImportResult = { total: rows.length, imported: 0, skipped: 0, errors: [] }
-  const BATCH_SIZE = 450
 
-  // Вземи съществуващите externalIds за да не дублираме
-  const existingSnap = await getDocs(
-    query(collection(db, 'beneficiaries'), where('source', '==', 'import'))
-  )
-  const existingIds = new Set(existingSnap.docs.map(d => d.data().externalId))
+  // Намери съществуващите IDs
+  const existing = await getDocs(collection(db, 'beneficiaries'))
+  const existingIds = new Set(existing.docs.map(d => d.id))
 
+  const BATCH = 400
   let batch = writeBatch(db)
   let batchCount = 0
 
@@ -139,21 +202,30 @@ async function importBeneficiaries(
     try {
       const mapped = mapBeneficiary(rows[i], headers)
       if (!mapped.firstName && !mapped.lastName) { result.skipped++; continue }
-      if (existingIds.has(mapped.externalId) && mapped.externalId) { result.skipped++; continue }
 
-      const ref = doc(collection(db, 'beneficiaries'))
-      batch.set(ref, mapped)
+      // Използваме числовото ID от старата база като document ID
+      const docId = mapped.id ? String(mapped.id) : `ben_${Date.now()}_${i}`
+
+      if (existingIds.has(docId)) { result.skipped++; continue }
+
+      // Изчистваме null/'' стойности преди запис
+      const clean = Object.fromEntries(
+        Object.entries(mapped).filter(([k, v]) => k !== 'id' && v !== null && v !== '' && v !== undefined)
+      )
+
+      batch.set(doc(db, 'beneficiaries', docId), clean)
       batchCount++
       result.imported++
 
-      if (batchCount >= BATCH_SIZE) {
+      if (batchCount >= BATCH) {
         await batch.commit()
         batch = writeBatch(db)
         batchCount = 0
       }
-      if (i % 10 === 0) onProgress(Math.round((i / rows.length) * 100))
+
+      if (i % 20 === 0) onProgress(Math.round((i / rows.length) * 100))
     } catch (err) {
-      result.errors.push(`Ред ${i + 2}: ${err instanceof Error ? err.message : 'Грешка'}`)
+      result.errors.push(`Ред ${i + 2}: ${err instanceof Error ? err.message : String(err)}`)
     }
   }
 
@@ -163,18 +235,16 @@ async function importBeneficiaries(
 }
 
 async function importRequests(
-  rows: ImportRow[],
+  rows: RawRow[],
   headers: string[],
   onProgress: (n: number) => void
 ): Promise<ImportResult> {
   const result: ImportResult = { total: rows.length, imported: 0, skipped: 0, errors: [] }
-  const BATCH_SIZE = 450
 
-  const existingSnap = await getDocs(
-    query(collection(db, 'beneficiaryRequests'), where('source', '==', 'import'))
-  )
-  const existingIds = new Set(existingSnap.docs.map(d => d.data().externalId))
+  const existing = await getDocs(collection(db, 'beneficiaryRequests'))
+  const existingIds = new Set(existing.docs.map(d => d.id))
 
+  const BATCH = 400
   let batch = writeBatch(db)
   let batchCount = 0
 
@@ -182,26 +252,27 @@ async function importRequests(
     try {
       const mapped = mapRequest(rows[i], headers)
       if (!mapped.activity) { result.skipped++; continue }
-      if (existingIds.has(mapped.externalId) && mapped.externalId) { result.skipped++; continue }
 
-      // Изчисти undefined стойности
-      const clean = Object.fromEntries(
-        Object.entries(mapped).filter(([, v]) => v !== undefined && v !== '')
-      )
+      // Заявка ID от старата база като document ID
+      const docId = mapped.id ? String(mapped.id) : `req_${Date.now()}_${i}`
+      if (existingIds.has(docId)) { result.skipped++; continue }
 
-      const ref = doc(collection(db, 'beneficiaryRequests'))
-      batch.set(ref, clean)
+      const { id: _id, ...clean } = mapped
+      void _id
+
+      batch.set(doc(db, 'beneficiaryRequests', docId), clean)
       batchCount++
       result.imported++
 
-      if (batchCount >= BATCH_SIZE) {
+      if (batchCount >= BATCH) {
         await batch.commit()
         batch = writeBatch(db)
         batchCount = 0
       }
+
       if (i % 50 === 0) onProgress(Math.round((i / rows.length) * 100))
     } catch (err) {
-      result.errors.push(`Ред ${i + 2}: ${err instanceof Error ? err.message : 'Грешка'}`)
+      result.errors.push(`Ред ${i + 2}: ${err instanceof Error ? err.message : String(err)}`)
     }
   }
 
@@ -210,16 +281,16 @@ async function importRequests(
   return result
 }
 
-// ── Компонент ─────────────────────────────────────────────────
+// ── UI ───────────────────────────────────────────────────────────
 export default function ImportPage() {
-  const [sheets, setSheets]           = useState<SheetPreview[]>([])
-  const [fileName, setFileName]       = useState('')
-  const [dragging, setDragging]       = useState(false)
-  const [parsing, setParsing]         = useState(false)
-  const [importing, setImporting]     = useState(false)
-  const [progress, setProgress]       = useState(0)
+  const [sheets, setSheets]               = useState<SheetPreview[]>([])
+  const [fileName, setFileName]           = useState('')
+  const [dragging, setDragging]           = useState(false)
+  const [parsing, setParsing]             = useState(false)
+  const [importing, setImporting]         = useState(false)
+  const [progress, setProgress]           = useState(0)
   const [progressLabel, setProgressLabel] = useState('')
-  const [results, setResults]         = useState<{ sheet: string; result: ImportResult }[]>([])
+  const [results, setResults]             = useState<{ sheet: string; result: ImportResult }[]>([])
   const [expandedSheet, setExpandedSheet] = useState<string | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
 
@@ -229,33 +300,27 @@ export default function ImportPage() {
     setResults([])
     try {
       const buffer = await file.arrayBuffer()
-      const wb = XLSX.read(buffer, { type: 'array', cellDates: true })
+      const wb = XLSX.read(buffer, { type: 'array', raw: false, cellDates: false })
 
       const parsed: SheetPreview[] = []
       for (const sheetName of wb.SheetNames) {
         const ws = wb.Sheets[sheetName]
-        const rawData = XLSX.utils.sheet_to_json<(string | number | null)[]>(ws, {
-          header: 1,
-          defval: null,
-          raw: false,
+        const rawData = XLSX.utils.sheet_to_json<RawRow>(ws, {
+          header: 1, defval: null, raw: false,
         })
 
         if (rawData.length < 2) continue
 
         const headers = (rawData[0] as (string | null)[]).map(h => String(h ?? ''))
-        const rows = rawData.slice(1).map(row => {
-          const obj: ImportRow = {}
-          headers.forEach((h, i) => { obj[h] = (row as (string | number | null)[])[i] ?? null })
-          return obj
-        }).filter(row => Object.values(row).some(v => v !== null && v !== ''))
+        const rows = rawData.slice(1) as RawRow[]
+        const validRows = rows.filter(r => r.some(v => v !== null && v !== ''))
 
-        const type = detectSheetType(headers)
         parsed.push({
           name: sheetName,
           headers,
-          rows,
-          totalRows: rows.length,
-          type,
+          rows: validRows,
+          totalRows: validRows.length,
+          type: detectType(headers),
         })
       }
 
@@ -278,23 +343,20 @@ export default function ImportPage() {
     e.preventDefault()
     setDragging(false)
     const file = e.dataTransfer.files[0]
-    if (file && (file.name.endsWith('.xlsx') || file.name.endsWith('.xls') || file.name.endsWith('.csv'))) {
-      parseFile(file)
-    } else {
-      toast.error('Само .xlsx, .xls или .csv файлове')
-    }
+    if (file) parseFile(file)
+    else toast.error('Само .xlsx, .xls или .csv файлове')
   }
 
   async function handleImport() {
     const toImport = sheets.filter(s => s.type !== 'unknown')
-    if (toImport.length === 0) { toast.error('Няма разпознати листове за импорт'); return }
+    if (toImport.length === 0) { toast.error('Няма разпознати листове'); return }
 
     setImporting(true)
     setResults([])
     const allResults: { sheet: string; result: ImportResult }[] = []
 
     for (const sheet of toImport) {
-      setProgressLabel(`Импортиране: ${sheet.name}...`)
+      setProgressLabel(`Импортиране: ${sheet.name} (${sheet.totalRows} реда)...`)
       setProgress(0)
       try {
         let result: ImportResult
@@ -320,10 +382,10 @@ export default function ImportPage() {
     setProgress(0)
   }
 
-  const typeLabel: Record<SheetPreview['type'], { label: string; color: string }> = {
-    beneficiaries: { label: 'Бенефициенти',        color: 'label-success' },
-    requests:      { label: 'Заявки за дейности',  color: 'label-info' },
-    unknown:       { label: 'Непознат',             color: 'label-default' },
+  const typeLabel: Record<SheetPreview['type'], { label: string; cls: string }> = {
+    beneficiaries: { label: 'Бенефициенти',       cls: 'label-success' },
+    requests:      { label: 'Заявки за дейности', cls: 'label-info' },
+    unknown:       { label: 'Непознат',            cls: 'label-default' },
   }
 
   return (
@@ -337,34 +399,35 @@ export default function ImportPage() {
 
       <div className="max-w-4xl space-y-5">
 
-        {/* ── UPLOAD ZONE ── */}
+        {/* DROP ZONE */}
         <div className="box">
           <div className="box-header">
             <span className="box-title flex items-center gap-2">
-              <FileSpreadsheet size={18} /> Импорт от Excel / CSV
+              <FileSpreadsheet size={18} /> Импорт от Excel
             </span>
           </div>
           <div className="box-body">
             <p className="text-sm text-gray-500 mb-4">
-              Поддържа файловете от стария Caritas export. Автоматично разпознава
-              листовете <strong>Beneficients</strong> и <strong>Beneficients Data</strong>.
+              Провлачи или избери <strong>export.xlsx</strong> от старата Caritas система.
+              Автоматично разпознава листовете и импортира <strong>всички колони</strong>.
+              ID-тата запазват числовите стойности от старата база.
             </p>
 
-            {/* Drop zone */}
             <div
               onDragOver={e => { e.preventDefault(); setDragging(true) }}
               onDragLeave={() => setDragging(false)}
               onDrop={onDrop}
               onClick={() => fileRef.current?.click()}
               className={`border-2 border-dashed rounded-lg p-10 text-center cursor-pointer transition-all
-                ${dragging ? 'border-[#3c8dbc] bg-blue-50' : 'border-gray-300 hover:border-[#3c8dbc] hover:bg-gray-50'}`}
+                ${dragging
+                  ? 'border-[#3c8dbc] bg-blue-50'
+                  : 'border-gray-300 hover:border-[#3c8dbc] hover:bg-gray-50'}`}
             >
               <Upload size={40} className={`mx-auto mb-3 ${dragging ? 'text-[#3c8dbc]' : 'text-gray-300'}`} />
-              <p className="text-sm font-medium text-gray-600">
-                {fileName
-                  ? <span className="text-[#3c8dbc]">📊 {fileName}</span>
-                  : 'Провлачи файла тук или клик за избор'}
-              </p>
+              {fileName
+                ? <p className="text-sm font-medium text-[#3c8dbc]">📊 {fileName}</p>
+                : <p className="text-sm font-medium text-gray-600">Провлачи файла тук или клик за избор</p>
+              }
               <p className="text-xs text-gray-400 mt-1">.xlsx · .xls · .csv</p>
               <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv"
                 className="hidden" onChange={onFileChange} />
@@ -379,170 +442,167 @@ export default function ImportPage() {
           </div>
         </div>
 
-        {/* ── SHEET PREVIEWS ── */}
-        {sheets.length > 0 && (
-          <div className="space-y-3">
-            {sheets.map(sheet => (
-              <div key={sheet.name} className="box">
-                <div
-                  className="box-header cursor-pointer select-none"
-                  onClick={() => setExpandedSheet(expandedSheet === sheet.name ? null : sheet.name)}
-                >
-                  <div className="flex items-center gap-3">
-                    <span className="box-title">{sheet.name}</span>
-                    <span className={typeLabel[sheet.type].color + ' text-xs'}>
-                      {typeLabel[sheet.type].label}
-                    </span>
-                    <span className="text-xs text-gray-400">{sheet.totalRows} реда</span>
-                    {sheet.type === 'unknown' && (
-                      <span className="flex items-center gap-1 text-xs text-yellow-600">
-                        <AlertTriangle size={13} /> Ще бъде пропуснат
+        {/* SHEET PREVIEWS */}
+        {sheets.map(sheet => (
+          <div key={sheet.name} className="box">
+            <div
+              className="box-header cursor-pointer select-none"
+              onClick={() => setExpandedSheet(expandedSheet === sheet.name ? null : sheet.name)}
+            >
+              <div className="flex items-center gap-3">
+                <span className="box-title">{sheet.name}</span>
+                <span className={typeLabel[sheet.type].cls + ' text-xs'}>
+                  {typeLabel[sheet.type].label}
+                </span>
+                <span className="text-xs text-gray-400">{sheet.totalRows} реда · {sheet.headers.length} колони</span>
+                {sheet.type === 'unknown' && (
+                  <span className="flex items-center gap-1 text-xs text-yellow-600">
+                    <AlertTriangle size={13} /> Ще бъде пропуснат
+                  </span>
+                )}
+              </div>
+              {expandedSheet === sheet.name
+                ? <ChevronUp size={16} className="text-gray-400" />
+                : <ChevronDown size={16} className="text-gray-400" />
+              }
+            </div>
+
+            {expandedSheet === sheet.name && (
+              <div className="box-body p-0">
+                {/* Колони */}
+                <div className="px-4 py-3 bg-gray-50 border-b">
+                  <p className="text-xs font-semibold text-gray-500 mb-1">
+                    Колони ({sheet.headers.length}):
+                  </p>
+                  <div className="flex flex-wrap gap-1">
+                    {sheet.headers.filter(Boolean).map(h => (
+                      <span key={h} className="bg-white border border-gray-200 text-gray-600
+                        text-xs px-2 py-0.5 rounded">
+                        {h}
                       </span>
-                    )}
+                    ))}
                   </div>
-                  {expandedSheet === sheet.name
-                    ? <ChevronUp size={16} className="text-gray-400" />
-                    : <ChevronDown size={16} className="text-gray-400" />
-                  }
                 </div>
-
-                {expandedSheet === sheet.name && (
-                  <div className="box-body p-0">
-                    {/* Headers */}
-                    <div className="px-4 py-3 bg-gray-50 border-b text-xs text-gray-500">
-                      <strong>Колони ({sheet.headers.length}):</strong>{' '}
-                      {sheet.headers.filter(Boolean).join(' · ')}
-                    </div>
-                    {/* Preview rows */}
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-xs border-collapse">
-                        <thead>
-                          <tr className="bg-gray-100">
-                            {sheet.headers.slice(0, 8).map(h => (
-                              <th key={h} className="px-3 py-2 text-left font-semibold text-gray-600 whitespace-nowrap border-b">
-                                {h}
-                              </th>
-                            ))}
-                            {sheet.headers.length > 8 && (
-                              <th className="px-3 py-2 text-gray-400">+{sheet.headers.length - 8}</th>
-                            )}
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {sheet.rows.slice(0, 3).map((row, i) => (
-                            <tr key={i} className="border-b border-gray-100">
-                              {sheet.headers.slice(0, 8).map(h => (
-                                <td key={h} className="px-3 py-2 text-gray-600 max-w-[150px] truncate">
-                                  {String(row[h] ?? '')}
-                                </td>
-                              ))}
-                              {sheet.headers.length > 8 && <td />}
-                            </tr>
+                {/* Preview */}
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs border-collapse">
+                    <thead>
+                      <tr className="bg-gray-100">
+                        {sheet.headers.slice(0, 10).map(h => (
+                          <th key={h} className="px-3 py-2 text-left font-semibold text-gray-600 whitespace-nowrap border-b">
+                            {h}
+                          </th>
+                        ))}
+                        {sheet.headers.length > 10 && (
+                          <th className="px-3 py-2 text-gray-400 border-b">
+                            +{sheet.headers.length - 10} още
+                          </th>
+                        )}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {sheet.rows.slice(0, 3).map((row, i) => (
+                        <tr key={i} className="border-b border-gray-100 hover:bg-gray-50">
+                          {sheet.headers.slice(0, 10).map((h, hi) => (
+                            <td key={h} className="px-3 py-2 text-gray-600 max-w-[160px] truncate"
+                              title={String(row[hi] ?? '')}>
+                              {String(row[hi] ?? '')}
+                            </td>
                           ))}
-                        </tbody>
-                      </table>
-                    </div>
-                    <p className="px-4 py-2 text-xs text-gray-400 border-t">
-                      Показани 3 от {sheet.totalRows} реда
-                    </p>
-                  </div>
-                )}
-              </div>
-            ))}
-
-            {/* Import summary */}
-            <div className="box">
-              <div className="box-body">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="font-medium text-gray-700 mb-1">Готово за импорт:</p>
-                    <div className="flex flex-wrap gap-3 text-sm">
-                      {sheets.filter(s => s.type === 'beneficiaries').map(s => (
-                        <span key={s.name} className="flex items-center gap-1 text-green-700">
-                          <CheckCircle size={14} />
-                          {s.name}: <strong>{s.totalRows}</strong> бенефициента
-                        </span>
+                          {sheet.headers.length > 10 && <td />}
+                        </tr>
                       ))}
-                      {sheets.filter(s => s.type === 'requests').map(s => (
-                        <span key={s.name} className="flex items-center gap-1 text-blue-700">
-                          <CheckCircle size={14} />
-                          {s.name}: <strong>{s.totalRows}</strong> заявки
-                        </span>
-                      ))}
-                      {sheets.filter(s => s.type === 'unknown').map(s => (
-                        <span key={s.name} className="flex items-center gap-1 text-gray-400">
-                          <XCircle size={14} />
-                          {s.name}: пропуснат
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                  <button
-                    onClick={handleImport}
-                    disabled={importing || sheets.filter(s => s.type !== 'unknown').length === 0}
-                    className="btn-primary disabled:opacity-50"
-                  >
-                    {importing
-                      ? <span className="flex items-center gap-2">
-                          <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                          Импортиране...
-                        </span>
-                      : <><Upload size={15} /> Започни импорт</>
-                    }
-                  </button>
+                    </tbody>
+                  </table>
                 </div>
-
-                {/* Progress bar */}
-                {importing && (
-                  <div className="mt-4">
-                    <div className="flex items-center justify-between text-xs text-gray-500 mb-1">
-                      <span>{progressLabel}</span>
-                      <span>{progress}%</span>
-                    </div>
-                    <div className="w-full bg-gray-200 rounded-full h-2">
-                      <div
-                        className="bg-[#3c8dbc] h-2 rounded-full transition-all duration-300"
-                        style={{ width: `${progress}%` }}
-                      />
-                    </div>
-                  </div>
-                )}
+                <p className="px-4 py-2 text-xs text-gray-400 border-t">
+                  Показани 3 от {sheet.totalRows} реда
+                </p>
               </div>
+            )}
+          </div>
+        ))}
+
+        {/* IMPORT BUTTON + PROGRESS */}
+        {sheets.length > 0 && (
+          <div className="box">
+            <div className="box-body">
+              <div className="flex items-center justify-between flex-wrap gap-4">
+                <div className="space-y-1">
+                  {sheets.filter(s => s.type !== 'unknown').map(s => (
+                    <p key={s.name} className="flex items-center gap-2 text-sm text-gray-700">
+                      <CheckCircle size={15} className="text-green-500" />
+                      <strong>{s.name}</strong> — {s.totalRows} реда за импорт
+                    </p>
+                  ))}
+                  {sheets.filter(s => s.type === 'unknown').map(s => (
+                    <p key={s.name} className="flex items-center gap-2 text-sm text-gray-400">
+                      <XCircle size={15} />
+                      <strong>{s.name}</strong> — ще бъде пропуснат
+                    </p>
+                  ))}
+                </div>
+                <button
+                  onClick={handleImport}
+                  disabled={importing || sheets.every(s => s.type === 'unknown')}
+                  className="btn-primary disabled:opacity-50 px-6 py-2.5"
+                >
+                  {importing
+                    ? <span className="flex items-center gap-2">
+                        <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                        Импортиране...
+                      </span>
+                    : <><Upload size={15} /> Започни импорт</>
+                  }
+                </button>
+              </div>
+
+              {importing && (
+                <div className="mt-4">
+                  <div className="flex justify-between text-xs text-gray-500 mb-1">
+                    <span>{progressLabel}</span>
+                    <span>{progress}%</span>
+                  </div>
+                  <div className="w-full bg-gray-200 rounded-full h-2.5">
+                    <div className="bg-[#3c8dbc] h-2.5 rounded-full transition-all duration-300"
+                      style={{ width: `${progress}%` }} />
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         )}
 
-        {/* ── RESULTS ── */}
+        {/* RESULTS */}
         {results.length > 0 && (
           <div className="box">
             <div className="box-header">
               <span className="box-title flex items-center gap-2">
-                <CheckCircle size={18} className="text-green-600" /> Резултати от импорта
+                <CheckCircle size={18} className="text-green-600" /> Резултати
               </span>
             </div>
             <div className="box-body space-y-4">
               {results.map(({ sheet, result }) => (
                 <div key={sheet} className="border border-gray-200 rounded-lg p-4">
                   <p className="font-semibold text-gray-700 mb-3">{sheet}</p>
-                  <div className="grid grid-cols-3 gap-4 mb-3">
+                  <div className="grid grid-cols-3 gap-3 mb-3">
                     <div className="text-center p-3 bg-gray-50 rounded">
                       <p className="text-2xl font-bold text-gray-700">{result.total}</p>
-                      <p className="text-xs text-gray-500">Общо реда</p>
+                      <p className="text-xs text-gray-500 mt-1">Общо реда</p>
                     </div>
                     <div className="text-center p-3 bg-green-50 rounded">
                       <p className="text-2xl font-bold text-green-600">{result.imported}</p>
-                      <p className="text-xs text-gray-500">Импортирани</p>
+                      <p className="text-xs text-gray-500 mt-1">Импортирани</p>
                     </div>
                     <div className="text-center p-3 bg-yellow-50 rounded">
                       <p className="text-2xl font-bold text-yellow-600">{result.skipped}</p>
-                      <p className="text-xs text-gray-500">Пропуснати (дубликати)</p>
+                      <p className="text-xs text-gray-500 mt-1">Пропуснати</p>
                     </div>
                   </div>
-
-                  {result.errors.length > 0 && (
+                  {result.errors.length > 0 ? (
                     <div className="bg-red-50 border border-red-200 rounded p-3">
-                      <p className="text-xs font-semibold text-red-700 mb-1 flex items-center gap-1">
-                        <XCircle size={13} /> {result.errors.length} грешки:
+                      <p className="text-xs font-semibold text-red-700 mb-2 flex items-center gap-1">
+                        <XCircle size={13} /> {result.errors.length} грешки
                       </p>
                       <div className="max-h-32 overflow-y-auto space-y-0.5">
                         {result.errors.map((e, i) => (
@@ -550,12 +610,9 @@ export default function ImportPage() {
                         ))}
                       </div>
                     </div>
-                  )}
-
-                  {result.errors.length === 0 && result.imported > 0 && (
+                  ) : (
                     <div className="flex items-center gap-2 text-sm text-green-600">
-                      <CheckCircle size={16} />
-                      Успешен импорт без грешки!
+                      <CheckCircle size={15} /> Успешен импорт без грешки!
                     </div>
                   )}
                 </div>
@@ -564,18 +621,16 @@ export default function ImportPage() {
           </div>
         )}
 
-        {/* ── INFO BOX ── */}
+        {/* INFO */}
         <div className="box">
-          <div className="box-header">
-            <span className="box-title">Информация</span>
-          </div>
+          <div className="box-header"><span className="box-title">Информация</span></div>
           <div className="box-body text-sm text-gray-600 space-y-2">
-            <p>• Поддържани формати: <strong>.xlsx</strong>, <strong>.xls</strong>, <strong>.csv</strong></p>
-            <p>• Листът <strong>Beneficients</strong> → импортира се в колекция <code>beneficiaries</code></p>
-            <p>• Листът <strong>Beneficients Data</strong> → импортира се в колекция <code>beneficiaryRequests</code></p>
-            <p>• Дубликатите се пропускат автоматично (по External ID)</p>
-            <p>• Импортът може да се пуска многократно — съществуващите записи не се презаписват</p>
-            <p>• При голям файл (2000+ реда) може да отнеме 1-2 минути</p>
+            <p>• Лист <strong>Beneficients</strong> (249 реда) → колекция <code>beneficiaries</code> — всички 28 колони</p>
+            <p>• Лист <strong>Beneficients Data</strong> (2968 реда) → колекция <code>beneficiaryRequests</code> — всички 28 колони + Cases</p>
+            <p>• <strong>ID-тата са числови</strong> от старата база (950, 1218...) — не случайни низове</p>
+            <p>• Дубликатите се пропускат — импортът може да се пуска повторно безопасно</p>
+            <p>• Cases се парсват автоматично: <code>31.08.2026 - Оператор - Описание</code></p>
+            <p>• При 2968 реда импортът отнема около 2-3 минути</p>
           </div>
         </div>
 
