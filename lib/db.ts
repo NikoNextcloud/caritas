@@ -1,5 +1,5 @@
 import {
-  collection, doc, getDocs, getDoc, addDoc, updateDoc, deleteDoc,
+  collection, doc, getDocs, getDoc, addDoc, setDoc, updateDoc, deleteDoc,
   query, where, orderBy, limit, onSnapshot, writeBatch,
   type DocumentSnapshot, type DocumentData
 } from 'firebase/firestore'
@@ -136,8 +136,15 @@ export async function getBeneficiary(id: string) {
 }
 
 export async function addBeneficiary(data: Omit<Beneficiary, 'id' | 'createdAt' | 'updatedAt'>) {
-  const ref = await addDoc(beneficiariesCol, { ...data, ...await ownership(), createdAt: now(), updatedAt: now() })
-  return ref.id
+  const numericId = `${Date.now()}${Math.floor(Math.random() * 1000).toString().padStart(3, '0')}`
+  await setDoc(doc(beneficiariesCol, numericId), {
+    ...data,
+    externalId: data.externalId || numericId,
+    ...await ownership(),
+    createdAt: now(),
+    updatedAt: now(),
+  })
+  return numericId
 }
 
 export async function updateBeneficiary(id: string, data: Partial<Beneficiary>) {

@@ -16,6 +16,20 @@ const EMPTY: Partial<Beneficiary> = {
   requestedHelp: '', education: '', vulnerability: '', notes: '',
 }
 
+function numericBeneficiaryId(beneficiary: Partial<Beneficiary>) {
+  const externalId = String(beneficiary.externalId ?? '')
+  if (/^\d+$/.test(externalId)) return externalId
+  if (beneficiary.id && /^\d+$/.test(beneficiary.id)) return beneficiary.id
+
+  const source = beneficiary.id || `${beneficiary.firstName}-${beneficiary.lastName}-${beneficiary.createdAt}`
+  let hash = 2166136261
+  for (let index = 0; index < source.length; index++) {
+    hash ^= source.charCodeAt(index)
+    hash = Math.imul(hash, 16777619)
+  }
+  return String(100000000 + (hash >>> 0) % 900000000)
+}
+
 export default function BeneficiariesPage() {
   const [data, setData] = useState<Beneficiary[]>([])
   const [loading, setLoading] = useState(true)
@@ -43,7 +57,8 @@ export default function BeneficiariesPage() {
         b.middleName?.toLowerCase().includes(query.toLowerCase()) ||
         b.egn?.includes(query) ||
         b.email?.toLowerCase().includes(query.toLowerCase()) ||
-        b.phone?.includes(query)
+        b.phone?.includes(query) ||
+        numericBeneficiaryId(b).includes(query)
       )
     : data
 
@@ -92,7 +107,11 @@ export default function BeneficiariesPage() {
     setSaving(true)
     try {
       const photoUrl = photoFile ? await prepareBeneficiaryPhoto(photoFile) : editing.photoUrl
-      const record = { ...editing, ...(photoUrl ? { photoUrl } : {}) }
+      const record = {
+        ...editing,
+        ...(!isNew ? { externalId: numericBeneficiaryId(editing) } : {}),
+        ...(photoUrl ? { photoUrl } : {}),
+      }
       if (isNew) {
         await addBeneficiary(record as Omit<Beneficiary, 'id' | 'createdAt' | 'updatedAt'>)
       } else {
@@ -117,7 +136,7 @@ export default function BeneficiariesPage() {
   }
 
   const columns = [
-    { key: 'id', label: 'Id', width: '80px' },
+    { key: 'id', label: 'ID', width: '110px', render: (r: Beneficiary) => numericBeneficiaryId(r) },
     {
       key: 'photoUrl', label: 'Снимка', width: '76px', render: (r: Beneficiary) => r.photoUrl ? (
         <button type="button" onClick={() => setViewPhoto(r.photoUrl!)}
