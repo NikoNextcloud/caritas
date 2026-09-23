@@ -2,10 +2,10 @@
 import { useState, useRef, useCallback } from 'react'
 import AdminLayout from '@/components/layout/AdminLayout'
 import { db } from '@/lib/firebase'
-import { collection, doc, writeBatch, getDocs, query, where } from 'firebase/firestore'
+import { collection, doc, writeBatch, getDocs, deleteDoc } from 'firebase/firestore'
 import {
   Upload, FileSpreadsheet, CheckCircle, XCircle,
-  AlertTriangle, ChevronDown, ChevronUp, RefreshCw
+  AlertTriangle, ChevronDown, ChevronUp, RefreshCw, Trash2
 } from 'lucide-react'
 import toast, { Toaster } from 'react-hot-toast'
 import * as XLSX from 'xlsx'
@@ -281,6 +281,36 @@ async function importRequests(
   return result
 }
 
+// ── Изтрий всички бенефициенти + заявки ─────────────────────────
+async function deleteAllFromCollection(
+  colName: string,
+  onProgress: (n: number) => void
+): Promise<number> {
+  const snap = await getDocs(collection(db, colName))
+  const total = snap.docs.length
+  if (total === 0) return 0
+
+  const BATCH = 400
+  let batch = writeBatch(db)
+  let count = 0
+  let deleted = 0
+
+  for (const d of snap.docs) {
+    batch.delete(doc(db, colName, d.id))
+    count++
+    deleted++
+    if (count >= BATCH) {
+      await batch.commit()
+      batch = writeBatch(db)
+      count = 0
+      onProgress(Math.round((deleted / total) * 100))
+    }
+  }
+  if (count > 0) await batch.commit()
+  onProgress(100)
+  return deleted
+}
+
 // ── UI ───────────────────────────────────────────────────────────
 export default function ImportPage() {
   const [sheets, setSheets]               = useState<SheetPreview[]>([])
@@ -288,10 +318,13 @@ export default function ImportPage() {
   const [dragging, setDragging]           = useState(false)
   const [parsing, setParsing]             = useState(false)
   const [importing, setImporting]         = useState(false)
+  const [deleting, setDeleting]           = useState(false)
+  const [clearBeforeImport, setClearBeforeImport] = useState(true)
   const [progress, setProgress]           = useState(0)
   const [progressLabel, setProgressLabel] = useState('')
   const [results, setResults]             = useState<{ sheet: string; result: ImportResult }[]>([])
   const [expandedSheet, setExpandedSheet] = useState<string | null>(null)
+  const [deleteCount, setDeleteCount]     = useState<{ben: number, req: number} | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
 
   const parseFile = useCallback(async (file: File) => {
@@ -334,6 +367,32 @@ export default function ImportPage() {
     setParsing(false)
   }, [])
 
+  async function handleDeleteAll() {
+    if (!confirm('⚠️ Внимание! Ще изтриеш ВСИЧКИ бенефициенти и заявки от Firebase. Сигурен ли си?')) return
+    if (!confirm('Последно потвърждение — изтриване на ВСИЧКИ данни?')) return
+
+    setDeleting(true)
+    setDeleteCount(null)
+    try {
+      setProgressLabel('Изтриване на бенефициенти...')
+      setProgress(0)
+      const ben = await deleteAllFromCollection('beneficiaries', setProgress)
+
+      setProgressLabel('Изтриване на заявки...')
+      setProgress(0)
+      const req = await deleteAllFromCollection('beneficiaryRequests', setProgress)
+
+      setDeleteCount({ ben, req })
+      toast.success(`Изтрити: ${ben} бенефициента и ${req} заявки`)
+    } catch (err) {
+      toast.error('Грешка при изтриване')
+      console.error(err)
+    }
+    setDeleting(false)
+    setProgressLabel('')
+    setProgress(0)
+  }
+
   function onFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (file) parseFile(file)
@@ -354,6 +413,29 @@ export default function ImportPage() {
     setImporting(true)
     setResults([])
     const allResults: { sheet: string; result: ImportResult }[] = []
+
+    // Изтрий преди импорт ако е избрано
+    if (clearBeforeImport) {
+      try {
+        const hasBen = toImport.some(s => s.type === 'beneficiaries')
+        const hasReq = toImport.some(s => s.type === 'requests')
+        if (hasBen) {
+          setProgressLabel('Изчистване на стари бенефициенти...')
+          setProgress(0)
+          await deleteAllFromCollection('beneficiaries', setProgress)
+        }
+        if (hasReq) {
+          setProgressLabel('Изчистване на стари заявки...')
+          setProgress(0)
+          await deleteAllFromCollection('beneficiaryRequests', setProgress)
+        }
+      } catch (err) {
+        toast.error('Грешка при изчистване')
+        console.error(err)
+        setImporting(false)
+        return
+      }
+    }
 
     for (const sheet of toImport) {
       setProgressLabel(`Импортиране: ${sheet.name} (${sheet.totalRows} реда)...`)
@@ -542,19 +624,34 @@ export default function ImportPage() {
                     </p>
                   ))}
                 </div>
-                <button
-                  onClick={handleImport}
-                  disabled={importing || sheets.every(s => s.type === 'unknown')}
-                  className="btn-primary disabled:opacity-50 px-6 py-2.5"
-                >
-                  {importing
-                    ? <span className="flex items-center gap-2">
-                        <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                        Импортиране...
-                      </span>
-                    : <><Upload size={15} /> Започни импорт</>
-                  }
-                </button>
+                <div className="flex flex-col items-end gap-3">
+                  {/* Опция за изчистване преди импорт */}
+                  <label className="flex items-center gap-2 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={clearBeforeImport}
+                      onChange={e => setClearBeforeImport(e.target.checked)}
+                      className="w-4 h-4 cursor-pointer accent-[#3c8dbc]"
+                    />
+                    <span className="text-sm text-gray-600">
+                      Изчисти старите данни преди импорт <span className="text-[#3c8dbc] font-medium">(препоръчано)</span>
+                    </span>
+                  </label>
+
+                  <button
+                    onClick={handleImport}
+                    disabled={importing || deleting || sheets.every(s => s.type === 'unknown')}
+                    className="btn-primary disabled:opacity-50 px-6 py-2.5"
+                  >
+                    {importing
+                      ? <span className="flex items-center gap-2">
+                          <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                          Импортиране...
+                        </span>
+                      : <><Upload size={15} /> Започни импорт</>
+                    }
+                  </button>
+                </div>
               </div>
 
               {importing && (
@@ -621,6 +718,57 @@ export default function ImportPage() {
           </div>
         )}
 
+        {/* ОПАСНА ЗОНА - Изтриване */}
+        <div className="box border-red-200">
+          <div className="box-header" style={{borderBottom: '1px solid #fecaca'}}>
+            <span className="box-title flex items-center gap-2 text-red-700">
+              <Trash2 size={18} /> Опасна зона
+            </span>
+          </div>
+          <div className="box-body space-y-4">
+            <p className="text-sm text-gray-600">
+              Изтрий <strong>всички</strong> бенефициенти и заявки от Firebase преди нов импорт.
+              Използвай само ако искаш да започнеш от нулата.
+            </p>
+
+            {deleteCount && (
+              <div className="bg-green-50 border border-green-200 rounded p-3 text-sm text-green-700">
+                <CheckCircle size={14} className="inline mr-1" />
+                Изтрити: <strong>{deleteCount.ben}</strong> бенефициента и <strong>{deleteCount.req}</strong> заявки
+              </div>
+            )}
+
+            {deleting && (
+              <div className="space-y-1">
+                <div className="flex justify-between text-xs text-gray-500 mb-1">
+                  <span>{progressLabel}</span>
+                  <span>{progress}%</span>
+                </div>
+                <div className="w-full bg-gray-200 rounded-full h-2">
+                  <div className="bg-red-500 h-2 rounded-full transition-all duration-300"
+                    style={{ width: `${progress}%` }} />
+                </div>
+              </div>
+            )}
+
+            <div className="flex flex-wrap gap-3">
+              <button
+                onClick={() => handleDeleteAll()}
+                disabled={deleting || importing}
+                className="btn-danger disabled:opacity-50"
+              >
+                {deleting
+                  ? <span className="flex items-center gap-2">
+                      <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      Изтриване...
+                    </span>
+                  : <><Trash2 size={15} /> Изтрий всички бенефициенти и заявки</>
+                }
+              </button>
+            </div>
+          </div>
+        </div>
+
         {/* INFO */}
         <div className="box">
           <div className="box-header"><span className="box-title">Информация</span></div>
@@ -628,7 +776,7 @@ export default function ImportPage() {
             <p>• Лист <strong>Beneficients</strong> (249 реда) → колекция <code>beneficiaries</code> — всички 28 колони</p>
             <p>• Лист <strong>Beneficients Data</strong> (2968 реда) → колекция <code>beneficiaryRequests</code> — всички 28 колони + Cases</p>
             <p>• <strong>ID-тата са числови</strong> от старата база (950, 1218...) — не случайни низове</p>
-            <p>• Дубликатите се пропускат — импортът може да се пуска повторно безопасно</p>
+            <p>• <strong>Изчисти преди импорт</strong> — гарантира без дублиране</p>
             <p>• Cases се парсват автоматично: <code>31.08.2026 - Оператор - Описание</code></p>
             <p>• При 2968 реда импортът отнема около 2-3 минути</p>
           </div>
