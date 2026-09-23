@@ -4,6 +4,7 @@ import AdminLayout from '@/components/layout/AdminLayout'
 import DataTable from '@/components/ui/DataTable'
 import Modal from '@/components/ui/Modal'
 import StatusBadge from '@/components/ui/StatusBadge'
+import UserAssignment from '@/components/ui/UserAssignment'
 import { getRequests, addRequest, updateRequest, deleteRequests } from '@/lib/db'
 import type { BeneficiaryRequest, RequestStatus, CaseEntry, SearchParams } from '@/types'
 import { Search, Plus, Download, RefreshCw } from 'lucide-react'
@@ -307,6 +308,7 @@ export default function RequestsPage() {
               <textarea className="form-control" rows={2} value={editing.comment ?? ''}
                 onChange={e => setEditing(v => ({ ...v, comment: e.target.value }))} />
             </div>
+            <UserAssignment value={editing.assignedToUid} onChange={(uid, name) => setEditing(v => ({ ...v, assignedToUid: uid, assignedToName: name }))} />
           </div>
 
           <div className="border-t pt-3">

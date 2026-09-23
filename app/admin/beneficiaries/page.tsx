@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import AdminLayout from '@/components/layout/AdminLayout'
 import DataTable from '@/components/ui/DataTable'
 import Modal from '@/components/ui/Modal'
+import UserAssignment from '@/components/ui/UserAssignment'
 import { getBeneficiaries, addBeneficiary, updateBeneficiary, deleteBeneficiary } from '@/lib/db'
 import type { Beneficiary } from '@/types'
 import { Plus, Search } from 'lucide-react'
@@ -211,6 +212,7 @@ export default function BeneficiariesPage() {
               value={editing.notes ?? ''}
               onChange={e => setEditing(v => ({ ...v, notes: e.target.value }))} />
           </div>
+          <UserAssignment value={editing.assignedToUid} onChange={(uid, name) => setEditing(v => ({ ...v, assignedToUid: uid, assignedToName: name }))} />
         </div>
         <div className="flex gap-3 justify-end border-t pt-4 mt-2">
           <button onClick={() => setModal(false)} className="btn-default">Откажи</button>

@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import AdminLayout from '@/components/layout/AdminLayout'
 import DataTable from '@/components/ui/DataTable'
 import Modal from '@/components/ui/Modal'
+import UserAssignment from '@/components/ui/UserAssignment'
 import { getTasks, addTask, updateTask, deleteTask } from '@/lib/db'
 import type { Task, TaskStatus, TaskPriority } from '@/types'
 import { Plus } from 'lucide-react'
@@ -131,12 +132,7 @@ export default function TasksPage() {
             </div>
           </div>
           <div className="grid grid-cols-2 gap-4">
-            <div className="form-group">
-              <label className="form-label">Назначено на</label>
-              <input type="text" className="form-control"
-                value={editing.assignedTo ?? ''}
-                onChange={e => setEditing(v => ({ ...v, assignedTo: e.target.value }))} />
-            </div>
+            <UserAssignment value={editing.assignedToUid} onChange={(uid, name) => setEditing(v => ({ ...v, assignedToUid: uid, assignedToName: name, assignedTo: name }))} />
             <div className="form-group">
               <label className="form-label">Краен срок</label>
               <input type="date" className="form-control"

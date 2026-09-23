@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from 'react'
 import AdminLayout from '@/components/layout/AdminLayout'
 import DataTable from '@/components/ui/DataTable'
 import Modal from '@/components/ui/Modal'
+import UserAssignment from '@/components/ui/UserAssignment'
 import { addDonor, deleteDonor, getDonors, updateDonor } from '@/lib/db'
 import type { DonationEntry, DonationFrequency, Donor, DonorEntityType } from '@/types'
 import { Plus, Search, Trash2 } from 'lucide-react'
@@ -102,6 +103,7 @@ export default function DonorsPage() {
           {([['email','Имейл'],['phone','Телефон'],['address','Адрес']] as const).map(([key, label]) => <div className="form-group" key={key}><label className="form-label">{label}</label><input className="form-control" value={editing[key] || ''} onChange={event => setEditing(value => ({ ...value, [key]: event.target.value }))} /></div>)}
           <div className="form-group md:col-span-2"><label className="form-label">Основание / предназначение на дарението *</label><textarea className="form-control" rows={2} value={editing.basis || ''} onChange={event => setEditing(value => ({ ...value, basis: event.target.value }))} /></div>
           <div className="form-group md:col-span-2"><label className="form-label">Бележки</label><textarea className="form-control" rows={2} value={editing.notes || ''} onChange={event => setEditing(value => ({ ...value, notes: event.target.value }))} /></div>
+          <UserAssignment value={editing.assignedToUid} onChange={(uid, name) => setEditing(value => ({ ...value, assignedToUid: uid, assignedToName: name }))} />
         </div>
 
         <div className="border-t pt-4 mt-2">

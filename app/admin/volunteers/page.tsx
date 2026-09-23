@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import AdminLayout from '@/components/layout/AdminLayout'
 import DataTable from '@/components/ui/DataTable'
 import Modal from '@/components/ui/Modal'
+import UserAssignment from '@/components/ui/UserAssignment'
 import { addVolunteer, deleteVolunteer, getVolunteers, updateVolunteer } from '@/lib/db'
 import type { Volunteer, VolunteerStatus } from '@/types'
 import { Plus, Search } from 'lucide-react'
@@ -75,6 +76,7 @@ export default function VolunteersPage() {
           <div className="form-group"><label className="form-label">Начална дата</label><input type="date" className="form-control" value={editing.startDate || ''} onChange={event => setEditing(value => ({ ...value, startDate: event.target.value }))} /></div>
           <div className="form-group"><label className="form-label">Статус</label><select className="form-control" value={editing.status || 'Активен'} onChange={event => setEditing(value => ({ ...value, status: event.target.value as VolunteerStatus }))}><option>Активен</option><option>Пауза</option><option>Неактивен</option></select></div>
           <div className="form-group md:col-span-2"><label className="form-label">Бележки</label><textarea className="form-control" rows={3} value={editing.notes || ''} onChange={event => setEditing(value => ({ ...value, notes: event.target.value }))} /></div>
+          <UserAssignment value={editing.assignedToUid} onChange={(uid, name) => setEditing(value => ({ ...value, assignedToUid: uid, assignedToName: name }))} />
         </div>
         <div className="flex justify-end gap-3 border-t pt-4"><button className="btn-default" onClick={() => setModal(false)}>Откажи</button><button className="btn-primary" disabled={saving} onClick={save}>{saving ? 'Запис...' : 'Запази'}</button></div>
       </Modal>
