@@ -2,10 +2,12 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
+import { collection, getDocs, writeBatch } from 'firebase/firestore'
 import AdminLayout from '@/components/layout/AdminLayout'
+import { db } from '@/lib/firebase'
 import { getAuditLogs } from '@/lib/db'
 import type { AuditAction, AuditLog, UserRole } from '@/types'
-import { Eye, History, LogIn, PencilLine, RefreshCcw, Search, ShieldCheck } from 'lucide-react'
+import { Eye, History, LogIn, PencilLine, RefreshCcw, Search, ShieldCheck, Trash2 } from 'lucide-react'
 import toast, { Toaster } from 'react-hot-toast'
 
 const ACTION_LABELS: Record<AuditAction, string> = {
@@ -43,6 +45,7 @@ const ENTITY_LABELS: Record<string, string> = {
 export default function HistoryPage() {
   const [logs, setLogs] = useState<AuditLog[]>([])
   const [loading, setLoading] = useState(true)
+  const [clearing, setClearing] = useState(false)
   const [search, setSearch] = useState('')
   const [actor, setActor] = useState('')
   const [action, setAction] = useState<AuditAction | ''>('')
@@ -55,6 +58,28 @@ export default function HistoryPage() {
       toast.error(error instanceof Error ? error.message : 'Историята не може да бъде заредена')
     } finally {
       setLoading(false)
+    }
+  }
+
+  async function clearHistory() {
+    if (clearing) return
+    const confirmed = window.confirm('Сигурни ли сте, че искате да изтриете цялата история? Това действие не може да бъде отменено.')
+    if (!confirmed) return
+
+    setClearing(true)
+    try {
+      const snapshot = await getDocs(collection(db, 'auditLogs'))
+      for (let offset = 0; offset < snapshot.docs.length; offset += 400) {
+        const batch = writeBatch(db)
+        snapshot.docs.slice(offset, offset + 400).forEach(item => batch.delete(item.ref))
+        await batch.commit()
+      }
+      setLogs([])
+      toast.success('Историята е изтрита')
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Историята не може да бъде изтрита')
+    } finally {
+      setClearing(false)
     }
   }
 
@@ -92,7 +117,10 @@ export default function HistoryPage() {
           <span className="box-title flex items-center gap-2"><ShieldCheck size={18} /> История на действията</span>
           <p className="text-xs text-gray-500 mt-1">Вижда се само от администратор. Показват се последните 500 събития.</p>
         </div>
-        <button className="btn-default" onClick={() => void load()} disabled={loading}><RefreshCcw size={16} className={loading ? 'animate-spin' : ''} /> Обнови</button>
+        <div className="flex items-center gap-2 flex-wrap">
+          <button className="btn-default" onClick={() => void load()} disabled={loading || clearing}><RefreshCcw size={16} className={loading ? 'animate-spin' : ''} /> Обнови</button>
+          <button className="btn-default text-red-600 border-red-200 hover:bg-red-50" onClick={() => void clearHistory()} disabled={loading || clearing}><Trash2 size={16} /> {clearing ? 'Изтриване...' : 'Изтрий историята'}</button>
+        </div>
       </div>
       <div className="box-body">
         <div className="grid grid-cols-1 lg:grid-cols-[1fr_230px_210px] gap-3 mb-4">
