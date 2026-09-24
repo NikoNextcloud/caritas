@@ -17,6 +17,7 @@ interface Props<T extends { id: string }> {
   onDelete?: (ids: string[]) => void
   selectable?: boolean
   loading?: boolean
+  rowClassName?: (row: T, index: number) => string
   serverPagination?: {
     page: number
     total: number
@@ -29,7 +30,7 @@ interface Props<T extends { id: string }> {
 
 export default function DataTable<T extends { id: string }>({
   columns, data, perPage = 20, onEdit, onDelete, selectable = true, loading = false,
-  serverPagination,
+  serverPagination, rowClassName,
 }: Props<T>) {
   const [page, setPage] = useState(1)
   const [selected, setSelected] = useState<Set<string>>(new Set())
@@ -123,7 +124,7 @@ export default function DataTable<T extends { id: string }>({
             ) : pageData.map((row, idx) => (
               <tr key={row.id}
                 className={`border-b border-gray-100 hover:bg-gray-50 transition-colors
-                  ${idx % 2 === 1 ? 'bg-gray-50/50' : 'bg-white'}
+                  ${rowClassName ? rowClassName(row, idx) : (idx % 2 === 1 ? 'bg-gray-50/50' : 'bg-white')}
                   ${selected.has(row.id) ? '!bg-blue-50' : ''}`}>
                 {selectable && (
                   <td className="px-3 py-2">
