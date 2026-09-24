@@ -8,7 +8,7 @@ import {
 import { createUserWithEmailAndPassword, getAuth, signOut } from 'firebase/auth'
 import { deleteApp, initializeApp } from 'firebase/app'
 import { db, firebaseConfig } from '@/lib/firebase'
-import { subscribeToOnlineUsers } from '@/lib/db'
+import { addAuditLog, subscribeToOnlineUsers } from '@/lib/db'
 import type { AdminUser, UserRole } from '@/types'
 import { Plus, Shield } from 'lucide-react'
 import toast, { Toaster } from 'react-hot-toast'
@@ -24,9 +24,10 @@ interface AdminUserRow {
   createdAt: string
 }
 
-const ROLES: UserRole[] = ['admin', 'user']
+const ROLES: UserRole[] = ['admin', 'editor', 'user']
 const roleLabel: Record<UserRole, string> = {
   admin:    'Администратор',
+  editor:   'Редактор',
   user:     'Потребител',
   operator: 'Оператор',
   viewer:   'Преглед',
@@ -86,6 +87,7 @@ export default function UsersPage() {
       })
       await signOut(secondaryAuth)
       await deleteApp(secondaryApp)
+      await addAuditLog({ action: 'create', entityType: 'user', entityId: cred.user.uid, description: `Създаден е потребител с роля „${roleLabel[form.role]}“`, changedFields: ['email', 'displayName', 'role'] }).catch(() => {})
       toast.success('Потребителят е създаден!')
       setModal(false)
       setForm(EMPTY)
@@ -102,6 +104,7 @@ export default function UsersPage() {
   async function handleRoleChange(uid: string, role: UserRole) {
     try {
       await updateDoc(doc(db, 'users', uid), { role })
+      await addAuditLog({ action: 'role_change', entityType: 'user', entityId: uid, description: `Променена е ролята на потребител на „${roleLabel[role]}“`, changedFields: ['role'] }).catch(() => {})
       toast.success('Ролята е обновена')
       load()
     } catch { toast.error('Грешка') }
@@ -112,6 +115,7 @@ export default function UsersPage() {
     if (!confirm(`Изтриване на ${selected.size} потребители?`)) return
     try {
       for (const id of Array.from(selected)) await deleteDoc(doc(db, 'users', id))
+      await addAuditLog({ action: 'delete', entityType: 'user', entityId: Array.from(selected).join(', '), description: `Изтрити са ${selected.size} потребители` }).catch(() => {})
       toast.success(`${selected.size} потребители изтрити`)
       setSelected(new Set())
       load()
@@ -148,7 +152,7 @@ export default function UsersPage() {
         </div>
         <div className="box-body">
           <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded text-sm text-blue-700">
-            <strong>Роли:</strong> Администратор — вижда и управлява всичко · Потребител — вижда всички бенефициенти, работодатели, доброволци и дарители; редактира само създадените от него или възложените му записи
+            <strong>Роли:</strong> Администратор — пълен достъп, потребители, импорт и история · Редактор — вижда и редактира всички оперативни записи, но няма административните секции · Потребител — редактира само създадените от него или възложените му записи
           </div>
 
           {/* Bulk delete bar */}

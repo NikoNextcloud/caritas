@@ -2,7 +2,23 @@
 // CARITAS ADMIN — TypeScript Types
 // ============================================================
 
-export type UserRole = 'admin' | 'user' | 'operator' | 'viewer'
+export type UserRole = 'admin' | 'editor' | 'user' | 'operator' | 'viewer'
+
+export type AuditAction = 'login' | 'logout' | 'view' | 'create' | 'update' | 'delete' | 'import' | 'role_change'
+
+export interface AuditLog {
+  id: string
+  actorUid: string
+  actorName: string
+  actorRole: UserRole
+  action: AuditAction
+  entityType: string
+  entityId?: string
+  description: string
+  path?: string
+  changedFields?: string[]
+  createdAt: string
+}
 
 export interface OwnedRecord {
   createdByUid?: string

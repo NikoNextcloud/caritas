@@ -10,6 +10,7 @@ import {
   detectSheetType, mapBeneficiaryRow, mapRequestRow,
   type ImportSheetType, type RawRow,
 } from '@/lib/import-mapping'
+import { addAuditLog } from '@/lib/db'
 
 interface SheetPreview {
   name: string
@@ -186,6 +187,13 @@ export default function ImportPage() {
         completed.push(await importSheet(sheet, setProgress))
       }
       setResults(completed)
+      const totalRows = completed.reduce((sum, result) => sum + result.rows, 0)
+      await addAuditLog({
+        action: 'import',
+        entityType: 'import',
+        description: `Импортиран е файл „${fileName}“ с ${totalRows} реда${clearBeforeImport ? ' след изчистване на текущите данни' : ''}`,
+        changedFields: ['beneficiaries', 'beneficiaryRequests'],
+      }).catch(() => {})
       toast.success('Импортът приключи успешно')
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Грешка при импорт')

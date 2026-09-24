@@ -4,11 +4,11 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname, useRouter } from 'next/navigation'
 import {
-  Bell, Briefcase, CalendarDays, CheckSquare, ChevronRight, Download, HandHeart,
+  Bell, Briefcase, CalendarDays, CheckSquare, ChevronRight, Download, HandHeart, History,
   HeartHandshake, LayoutDashboard, LogOut, Menu, Upload, User, Users,
 } from 'lucide-react'
 import { getAdminUser, logout, onAuth, startPresenceTracking } from '@/lib/auth'
-import { markAllNotificationsRead, markNotificationRead, subscribeToNotifications, subscribeToOnlineUsers } from '@/lib/db'
+import { addAuditLog, markAllNotificationsRead, markNotificationRead, subscribeToNotifications, subscribeToOnlineUsers } from '@/lib/db'
 import type { AdminUser, Notification, UserRole } from '@/types'
 import toast from 'react-hot-toast'
 
@@ -34,6 +34,7 @@ const MENU_ITEMS: MenuItem[] = [
   { label: 'Доброволци', href: '/admin/volunteers', icon: HeartHandshake },
   { label: 'Дарители', href: '/admin/donors', icon: HandHeart },
   { label: 'Export', href: '/admin/export', icon: Download },
+  { label: 'История', href: '/admin/history', icon: History, adminOnly: true },
   { label: 'Потребители', href: '/admin/users', icon: User, adminOnly: true },
   { label: 'Импорт', href: '/admin/import', icon: Upload, adminOnly: true },
 ]
@@ -51,12 +52,14 @@ export default function AdminLayout({ children, userName = 'Потребител
   const [notifOpen, setNotifOpen] = useState(false)
   const [openMenus, setOpenMenus] = useState<string[]>([])
   const [displayName, setDisplayName] = useState(userName)
+  const [currentUid, setCurrentUid] = useState('')
   const [role, setRole] = useState<UserRole>('user')
   const [authReady, setAuthReady] = useState(false)
   const [onlineUsers, setOnlineUsers] = useState<AdminUser[]>([])
   const [presenceName, setPresenceName] = useState('')
   const [clock, setClock] = useState(Date.now())
   const prevUnreadCount = useRef(0)
+  const lastLoggedPath = useRef('')
 
   const unreadCount = notifications.filter(n => !n.isRead).length
 
@@ -67,11 +70,34 @@ export default function AdminLayout({ children, userName = 'Потребител
     }
     const profile = await getAdminUser(user.uid)
     const name = profile?.displayName || user.displayName || user.email || userName
+    setCurrentUid(user.uid)
     setDisplayName(name)
     setPresenceName(name)
     setRole(profile?.role || 'user')
     setAuthReady(true)
+    const loginKey = `caritas-audit-login:${user.uid}`
+    if (!window.sessionStorage.getItem(loginKey)) {
+      window.sessionStorage.setItem(loginKey, '1')
+      void addAuditLog({ action: 'login', entityType: 'session', description: 'Вход в системата', path: '/auth/login' }).catch(() => {})
+    }
   }), [router, userName])
+
+  useEffect(() => {
+    if (!authReady || lastLoggedPath.current === pathname) return
+    lastLoggedPath.current = pathname
+    void addAuditLog({
+      action: 'view',
+      entityType: 'page',
+      entityId: pathname,
+      description: `Отворена страница: ${pageLabel(pathname)}`,
+      path: pathname,
+    }).catch(() => {})
+  }, [authReady, pathname])
+
+  useEffect(() => {
+    if (!authReady) return
+    if (isAdminPath(pathname) && role !== 'admin') router.replace('/admin/dashboard')
+  }, [authReady, pathname, role, router])
 
   useEffect(() => {
     if (!authReady) return
@@ -102,6 +128,8 @@ export default function AdminLayout({ children, userName = 'Потребител
 
   async function handleLogout() {
     try {
+      await addAuditLog({ action: 'logout', entityType: 'session', description: 'Изход от системата', path: pathname }).catch(() => {})
+      if (currentUid) window.sessionStorage.removeItem(`caritas-audit-login:${currentUid}`)
       await logout()
       router.push('/auth/login')
     } catch {
@@ -233,9 +261,34 @@ export default function AdminLayout({ children, userName = 'Потребител
           </div>
         </header>
         <main className="flex-1 overflow-y-auto p-4 md:p-6">
-          {authReady ? children : <div className="flex items-center justify-center h-full"><div className="primary-spinner animate-spin w-9 h-9 border-4 rounded-full" /></div>}
+          {authReady && (!isAdminPath(pathname) || role === 'admin') ? children : <div className="flex items-center justify-center h-full"><div className="primary-spinner animate-spin w-9 h-9 border-4 rounded-full" /></div>}
         </main>
       </div>
     </div>
   )
+}
+
+const ADMIN_PATHS = ['/admin/history', '/admin/users', '/admin/import']
+
+function isAdminPath(pathname: string) {
+  return ADMIN_PATHS.some(path => pathname === path || pathname.startsWith(`${path}/`))
+}
+
+function pageLabel(pathname: string) {
+  const labels: Record<string, string> = {
+    '/admin/dashboard': 'Основно табло',
+    '/admin/tasks': 'Списък задачи',
+    '/admin/schedule': 'График',
+    '/admin/beneficiaries': 'Бенефициенти',
+    '/admin/requests': 'Заявки за дейности',
+    '/admin/employers': 'Работодатели',
+    '/admin/volunteers': 'Доброволци',
+    '/admin/donors': 'Дарители',
+    '/admin/export': 'Експорт',
+    '/admin/history': 'История',
+    '/admin/users': 'Потребители',
+    '/admin/import': 'Импорт',
+  }
+  const match = Object.keys(labels).sort((a, b) => b.length - a.length).find(path => pathname === path || pathname.startsWith(`${path}/`))
+  return match ? labels[match] : pathname
 }

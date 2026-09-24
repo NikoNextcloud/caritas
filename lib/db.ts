@@ -8,7 +8,8 @@ import { db } from './firebase'
 import { auth } from './firebase'
 import type {
   BeneficiaryRequest, Beneficiary, Task, Employer,
-  Notification, SearchParams, RequestStatus, Donor, Volunteer, AdminUser, ScheduleEntry
+  Notification, SearchParams, RequestStatus, Donor, Volunteer, AdminUser, ScheduleEntry,
+  AuditAction, AuditLog, UserRole
 } from '@/types'
 
 const now = () => new Date().toISOString()
@@ -32,11 +33,14 @@ async function loadCurrentAccess() {
   if (!user) throw new Error('Необходим е вход в системата')
   const profile = await getDoc(doc(db, 'users', user.uid))
   const data = profile.exists() ? profile.data() as Partial<AdminUser> : {}
+  const role = (data.role || 'user') as UserRole
   return {
     uid: user.uid,
     name: data.displayName || user.displayName || user.email || 'Потребител',
-    role: data.role || 'user',
-    isAdmin: data.role === 'admin',
+    role,
+    isAdmin: role === 'admin',
+    isEditor: role === 'editor',
+    canEditAll: role === 'admin' || role === 'editor',
   }
 }
 
@@ -72,7 +76,7 @@ async function visibleCollection<T>(collectionName: string): Promise<T[]> {
   if (cached && cached.expiresAt > Date.now()) return cached.data as T[]
 
   const ref = collection(db, collectionName)
-  if (access.isAdmin || sharedReadCollections.has(collectionName)) {
+  if (access.canEditAll || sharedReadCollections.has(collectionName)) {
     const snap = await getDocs(ref)
     const data = snap.docs.map(d => ({ id: d.id, ...d.data() } as T))
     collectionCache.set(cacheKey, { data, expiresAt: Date.now() + COLLECTION_CACHE_MS })
@@ -90,6 +94,47 @@ async function visibleCollection<T>(collectionName: string): Promise<T[]> {
   const data = Array.from(unique.values())
   collectionCache.set(cacheKey, { data, expiresAt: Date.now() + COLLECTION_CACHE_MS })
   return data
+}
+
+// ── AUDIT HISTORY ─────────────────────────────────────────────
+export const auditLogsCol = collection(db, 'auditLogs')
+
+export async function addAuditLog(data: {
+  action: AuditAction
+  entityType: string
+  entityId?: string
+  description: string
+  changedFields?: string[]
+  path?: string
+}) {
+  const access = await currentAccess()
+  await addDoc(auditLogsCol, {
+    actorUid: access.uid,
+    actorName: access.name,
+    actorRole: access.role,
+    action: data.action,
+    entityType: data.entityType,
+    ...(data.entityId ? { entityId: data.entityId } : {}),
+    description: data.description,
+    ...(data.changedFields?.length ? { changedFields: data.changedFields } : {}),
+    path: data.path || (typeof window !== 'undefined' ? window.location.pathname : ''),
+    createdAt: now(),
+  })
+}
+
+async function auditChange(action: AuditAction, entityType: string, entityId: string | undefined, description: string, changedFields?: string[]) {
+  try {
+    await addAuditLog({ action, entityType, entityId, description, changedFields })
+  } catch (error) {
+    console.error('Audit log could not be written', error)
+  }
+}
+
+export async function getAuditLogs(resultLimit = 500) {
+  const access = await currentAccess()
+  if (!access.isAdmin) throw new Error('Само администратор има достъп до историята')
+  const snap = await getDocs(query(auditLogsCol, orderBy('createdAt', 'desc'), limit(resultLimit)))
+  return snap.docs.map(item => ({ id: item.id, ...item.data() } as AuditLog))
 }
 
 export interface CursorPage<T> {
@@ -167,7 +212,7 @@ export async function getRequestsPage(
   cursor: DocumentSnapshot<DocumentData> | null = null,
 ): Promise<CursorPage<BeneficiaryRequest>> {
   const access = await currentAccess()
-  if (!access.isAdmin) {
+  if (!access.canEditAll) {
     const visible = await visibleCollection<BeneficiaryRequest>('beneficiaryRequests')
     visible.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''))
     return {
@@ -188,12 +233,14 @@ export async function getRequest(id: string) {
 export async function addRequest(data: Omit<BeneficiaryRequest, 'id' | 'createdAt' | 'updatedAt'>) {
   const ref = await addDoc(requestsCol, { ...data, ...await ownership(), createdAt: now(), updatedAt: now() })
   clearCollectionCache('beneficiaryRequests')
+  await auditChange('create', 'beneficiaryRequest', ref.id, 'Създадена е заявка за дейност', Object.keys(data))
   return ref.id
 }
 
 export async function updateRequest(id: string, data: Partial<BeneficiaryRequest>) {
   await updateDoc(doc(requestsCol, id), { ...data, updatedAt: now() })
   clearCollectionCache('beneficiaryRequests')
+  await auditChange('update', 'beneficiaryRequest', id, 'Редактирана е заявка за дейност', Object.keys(data))
 }
 
 export async function deleteRequests(ids: string[]) {
@@ -201,11 +248,13 @@ export async function deleteRequests(ids: string[]) {
   ids.forEach(id => batch.delete(doc(requestsCol, id)))
   await batch.commit()
   clearCollectionCache('beneficiaryRequests')
+  await auditChange('delete', 'beneficiaryRequest', ids.join(', '), `Изтрити са ${ids.length} заявки`)
 }
 
 export async function updateRequestStatus(id: string, status: RequestStatus) {
   await updateDoc(doc(requestsCol, id), { status, updatedAt: now() })
   clearCollectionCache('beneficiaryRequests')
+  await auditChange('update', 'beneficiaryRequest', id, `Променен е статусът на заявка на „${status}“`, ['status'])
   await addNotification({
     type: 'status_change',
     title: 'Промяна на статус на заявка',
@@ -307,17 +356,20 @@ export async function addBeneficiary(data: Omit<Beneficiary, 'id' | 'createdAt' 
     updatedAt: now(),
   })
   clearCollectionCache('beneficiaries')
+  await auditChange('create', 'beneficiary', numericId, 'Създаден е нов бенефициент', Object.keys(data))
   return numericId
 }
 
 export async function updateBeneficiary(id: string, data: Partial<Beneficiary>) {
   await updateDoc(doc(beneficiariesCol, id), { ...data, updatedAt: now() })
   clearCollectionCache('beneficiaries')
+  await auditChange('update', 'beneficiary', id, 'Редактиран е бенефициент', Object.keys(data))
 }
 
 export async function deleteBeneficiary(id: string) {
   await deleteDoc(doc(beneficiariesCol, id))
   clearCollectionCache('beneficiaries')
+  await auditChange('delete', 'beneficiary', id, 'Изтрит е бенефициент')
 }
 
 // ── TASKS ─────────────────────────────────────────────────────
@@ -331,17 +383,20 @@ export async function getTasks() {
 export async function addTask(data: Omit<Task, 'id' | 'createdAt' | 'updatedAt'>) {
   const ref = await addDoc(tasksCol, { ...data, ...await ownership(), createdAt: now(), updatedAt: now() })
   clearCollectionCache('tasks')
+  await auditChange('create', 'task', ref.id, 'Създадена е задача', Object.keys(data))
   return ref.id
 }
 
 export async function updateTask(id: string, data: Partial<Task>) {
   await updateDoc(doc(tasksCol, id), { ...data, updatedAt: now() })
   clearCollectionCache('tasks')
+  await auditChange('update', 'task', id, 'Редактирана е задача', Object.keys(data))
 }
 
 export async function deleteTask(id: string) {
   await deleteDoc(doc(tasksCol, id))
   clearCollectionCache('tasks')
+  await auditChange('delete', 'task', id, 'Изтрита е задача')
 }
 
 // ── SCHEDULE ──────────────────────────────────────────────────
@@ -368,12 +423,14 @@ export async function getScheduleEntries(month: string) {
 export async function addScheduleEntry(data: Omit<ScheduleEntry, 'id' | 'createdAt' | 'updatedAt'>) {
   const ref = await addDoc(scheduleCol, { ...data, ...await ownership(), createdAt: now(), updatedAt: now() })
   clearCollectionCache('schedule')
+  await auditChange('create', 'schedule', ref.id, 'Добавен е запис в графика', Object.keys(data))
   return ref.id
 }
 
 export async function updateScheduleEntry(id: string, data: Partial<ScheduleEntry>) {
   await updateDoc(doc(scheduleCol, id), { ...data, updatedAt: now() })
   clearCollectionCache('schedule')
+  await auditChange('update', 'schedule', id, 'Редактиран е запис в графика', Object.keys(data))
 }
 
 export async function deleteScheduleEntries(ids: string[]) {
@@ -383,6 +440,7 @@ export async function deleteScheduleEntries(ids: string[]) {
     await batch.commit()
   }
   clearCollectionCache('schedule')
+  await auditChange('delete', 'schedule', ids.join(', '), `Изтрити са ${ids.length} записа от графика`)
 }
 
 export async function importScheduleEntries(entries: Array<Pick<ScheduleEntry, 'date' | 'time' | 'description' | 'phone' | 'performers' | 'sourceRow'>>) {
@@ -405,6 +463,7 @@ export async function importScheduleEntries(entries: Array<Pick<ScheduleEntry, '
     await batch.commit()
   }
   clearCollectionCache('schedule')
+  await auditChange('import', 'schedule', undefined, `Импортирани са ${entries.length} записа в графика`)
   return entries.length
 }
 
@@ -428,17 +487,20 @@ export async function getEmployers(search?: string) {
 export async function addEmployer(data: Omit<Employer, 'id' | 'createdAt' | 'updatedAt'>) {
   const ref = await addDoc(employersCol, { ...data, ...await ownership(), createdAt: now(), updatedAt: now() })
   clearCollectionCache('employers')
+  await auditChange('create', 'employer', ref.id, 'Създаден е работодател', Object.keys(data))
   return ref.id
 }
 
 export async function updateEmployer(id: string, data: Partial<Employer>) {
   await updateDoc(doc(employersCol, id), { ...data, updatedAt: now() })
   clearCollectionCache('employers')
+  await auditChange('update', 'employer', id, 'Редактиран е работодател', Object.keys(data))
 }
 
 export async function deleteEmployer(id: string) {
   await deleteDoc(doc(employersCol, id))
   clearCollectionCache('employers')
+  await auditChange('delete', 'employer', id, 'Изтрит е работодател')
 }
 
 // ── VOLUNTEERS ────────────────────────────────────────────────
@@ -452,17 +514,20 @@ export async function getVolunteers() {
 export async function addVolunteer(data: Omit<Volunteer, 'id' | 'createdAt' | 'updatedAt'>) {
   const ref = await addDoc(volunteersCol, { ...data, ...await ownership(), createdAt: now(), updatedAt: now() })
   clearCollectionCache('volunteers')
+  await auditChange('create', 'volunteer', ref.id, 'Създаден е доброволец', Object.keys(data))
   return ref.id
 }
 
 export async function updateVolunteer(id: string, data: Partial<Volunteer>) {
   await updateDoc(doc(volunteersCol, id), { ...data, updatedAt: now() })
   clearCollectionCache('volunteers')
+  await auditChange('update', 'volunteer', id, 'Редактиран е доброволец', Object.keys(data))
 }
 
 export async function deleteVolunteer(id: string) {
   await deleteDoc(doc(volunteersCol, id))
   clearCollectionCache('volunteers')
+  await auditChange('delete', 'volunteer', id, 'Изтрит е доброволец')
 }
 
 // ── DONORS ────────────────────────────────────────────────────
@@ -480,17 +545,20 @@ export async function getDonors() {
 export async function addDonor(data: Omit<Donor, 'id' | 'createdAt' | 'updatedAt'>) {
   const ref = await addDoc(donorsCol, { ...data, ...await ownership(), createdAt: now(), updatedAt: now() })
   clearCollectionCache('donors')
+  await auditChange('create', 'donor', ref.id, 'Създаден е дарител', Object.keys(data))
   return ref.id
 }
 
 export async function updateDonor(id: string, data: Partial<Donor>) {
   await updateDoc(doc(donorsCol, id), { ...data, updatedAt: now() })
   clearCollectionCache('donors')
+  await auditChange('update', 'donor', id, 'Редактиран е дарител', Object.keys(data))
 }
 
 export async function deleteDonor(id: string) {
   await deleteDoc(doc(donorsCol, id))
   clearCollectionCache('donors')
+  await auditChange('delete', 'donor', id, 'Изтрит е дарител')
 }
 
 // ── NOTIFICATIONS ─────────────────────────────────────────────
@@ -556,7 +624,7 @@ export async function getDashboardStats() {
     getCountFromServer(donorsCol),
   ])
 
-  if (access.isAdmin) {
+  if (access.canEditAll) {
     const [allRequests, confirmed, pending, rejected, allTasks] = await Promise.all([
       getCountFromServer(requestsCol),
       getCountFromServer(query(requestsCol, where('status', '==', 'Потвърдено'))),
