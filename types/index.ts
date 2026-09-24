@@ -17,6 +17,7 @@ export interface AdminUser {
   displayName: string
   role: UserRole
   isOnline: boolean
+  lastSeen?: string
   createdAt: string
 }
 

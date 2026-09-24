@@ -5,17 +5,19 @@ import DataTable from '@/components/ui/DataTable'
 import Modal from '@/components/ui/Modal'
 import StatusBadge from '@/components/ui/StatusBadge'
 import UserAssignment from '@/components/ui/UserAssignment'
-import { getRequests, addRequest, updateRequest, deleteRequests } from '@/lib/db'
+import { getRequests, getRequestsPage, addRequest, updateRequest, deleteRequests } from '@/lib/db'
 import type { BeneficiaryRequest, RequestStatus, CaseEntry, SearchParams } from '@/types'
 import { Search, Plus, Download, RefreshCw } from 'lucide-react'
 import toast, { Toaster } from 'react-hot-toast'
 import { exportToCSV } from '@/lib/export'
+import type { DocumentData, DocumentSnapshot } from 'firebase/firestore'
 
 const STATUSES: RequestStatus[] = ['Потвърдено', 'Отхвърлено', 'Чакащ', 'Приключен']
 
 const EMPTY_REQUEST: Partial<BeneficiaryRequest> = {
   activity: '', message: '', status: 'Чакащ', beneficiaryName: '', beneficiaryId: '',
 }
+const PAGE_SIZE = 25
 
 function CaseField({ label, value, onChange }: {
   label: string
@@ -51,28 +53,56 @@ export default function RequestsPage() {
   const [saving, setSaving]           = useState(false)
   const [search, setSearch]           = useState<SearchParams>({})
   const [quickSearch, setQuickSearch] = useState('')
+  const [page, setPage] = useState(1)
+  const [total, setTotal] = useState(0)
+  const [hasNext, setHasNext] = useState(false)
+  const [nextCursor, setNextCursor] = useState<DocumentSnapshot<DocumentData> | null>(null)
+  const [cursors, setCursors] = useState<Array<DocumentSnapshot<DocumentData> | null>>([null])
+  const [serverMode, setServerMode] = useState(true)
 
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const res = await getRequests({ search })
-      setData(res.data)
+      const hasAdvancedSearch = Object.values(search).some(Boolean)
+      if (hasAdvancedSearch) {
+        const res = await getRequests({ search, perPage: 100 })
+        setData(res.data)
+        setTotal(res.total)
+        setHasNext(false)
+        setNextCursor(null)
+        setServerMode(false)
+      } else {
+        const res = await getRequestsPage(PAGE_SIZE, cursors[page - 1] || null)
+        setData(res.data)
+        setTotal(res.total)
+        setHasNext(res.hasNext)
+        setNextCursor(res.nextCursor)
+        setServerMode(res.data.length < res.total || res.hasNext)
+      }
     } catch (err) {
       console.error('Load error:', err)
-      // Ако няма индекс — зареди без orderBy
-      try {
-        const res = await getRequests({ search: {} })
-        setData(res.data)
-        toast.error('Заредено без филтри — създай Firestore индекс')
-      } catch (err2) {
-        console.error('Fallback error:', err2)
-        toast.error('Грешка при зареждане — провери Firestore правилата')
-      }
+      setData([])
+      toast.error('Грешка при зареждане — проверете Firestore правилата или дневния лимит')
     }
     setLoading(false)
-  }, [search])
+  }, [search, page, cursors])
 
   useEffect(() => { load() }, [load])
+
+  function resetPaging() {
+    setCursors([null])
+    setPage(1)
+  }
+
+  function goNext() {
+    if (!hasNext || !nextCursor) return
+    setCursors(current => {
+      const next = current.slice(0, page)
+      next[page] = nextCursor
+      return next
+    })
+    setPage(current => current + 1)
+  }
 
   function openNew() {
     setEditing(EMPTY_REQUEST)
@@ -101,7 +131,7 @@ export default function RequestsPage() {
         toast.success('Заявката е обновена!')
       }
       setEditModal(false)
-      load()
+      resetPaging()
     } catch (err) {
       console.error('Save error:', err)
       toast.error('Грешка при запис — провери Firestore правилата')
@@ -113,7 +143,7 @@ export default function RequestsPage() {
     try {
       await deleteRequests(ids)
       toast.success(`${ids.length} записа изтрити`)
-      load()
+      resetPaging()
     } catch (err) {
       console.error('Delete error:', err)
       toast.error('Грешка при изтриване')
@@ -234,7 +264,7 @@ export default function RequestsPage() {
           {/* Резултати брой */}
           {!loading && (
             <p className="text-xs text-gray-400 mb-3">
-              {filtered.length} записа{quickSearch ? ` (филтрирани от ${data.length})` : ''}
+              {filtered.length} записа на тази страница{quickSearch ? ` (филтрирани от ${data.length})` : ` · общо ${total}`}
             </p>
           )}
 
@@ -244,6 +274,11 @@ export default function RequestsPage() {
             loading={loading}
             onEdit={openEdit}
             onDelete={handleDelete}
+            serverPagination={!serverMode || Object.values(search).some(Boolean) ? undefined : {
+              page, total, perPage: PAGE_SIZE, hasNext,
+              onNext: goNext,
+              onPrevious: () => setPage(current => Math.max(1, current - 1)),
+            }}
           />
         </div>
       </div>

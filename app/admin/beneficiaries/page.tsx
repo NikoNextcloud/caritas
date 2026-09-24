@@ -4,11 +4,12 @@ import AdminLayout from '@/components/layout/AdminLayout'
 import DataTable from '@/components/ui/DataTable'
 import Modal from '@/components/ui/Modal'
 import UserAssignment from '@/components/ui/UserAssignment'
-import { getBeneficiaries, addBeneficiary, updateBeneficiary, deleteBeneficiary } from '@/lib/db'
+import { getBeneficiariesPage, searchBeneficiaries, addBeneficiary, updateBeneficiary, deleteBeneficiary } from '@/lib/db'
 import { prepareBeneficiaryPhoto, validateBeneficiaryPhoto } from '@/lib/beneficiary-images'
 import type { Beneficiary } from '@/types'
 import { ArrowDownAZ, ArrowUpAZ, ImageIcon, Plus, Search, Upload } from 'lucide-react'
 import toast, { Toaster } from 'react-hot-toast'
+import type { DocumentData, DocumentSnapshot } from 'firebase/firestore'
 
 const EMPTY: Partial<Beneficiary> = {
   firstName: '', lastName: '', middleName: '', gender: '', birthDate: '', country: '', egn: '',
@@ -31,6 +32,7 @@ function numericBeneficiaryId(beneficiary: Partial<Beneficiary>) {
 }
 
 type SortKey = 'id' | 'firstName' | 'lastName'
+const PAGE_SIZE = 25
 
 export default function BeneficiariesPage() {
   const [data, setData] = useState<Beneficiary[]>([])
@@ -45,15 +47,63 @@ export default function BeneficiariesPage() {
   const [viewPhoto, setViewPhoto] = useState('')
   const [sortKey, setSortKey] = useState<SortKey>('lastName')
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc')
+  const [page, setPage] = useState(1)
+  const [total, setTotal] = useState(0)
+  const [hasNext, setHasNext] = useState(false)
+  const [nextCursor, setNextCursor] = useState<DocumentSnapshot<DocumentData> | null>(null)
+  const [cursors, setCursors] = useState<Array<DocumentSnapshot<DocumentData> | null>>([null])
+  const [searchMode, setSearchMode] = useState(false)
 
-  async function load() {
+  async function load(cursor = cursors[page - 1] || null) {
     setLoading(true)
-    try { setData(await getBeneficiaries()) }
+    try {
+      const result = await getBeneficiariesPage(PAGE_SIZE, cursor, sortKey, sortDirection)
+      setData(result.data)
+      setTotal(result.total)
+      setHasNext(result.hasNext)
+      setNextCursor(result.nextCursor)
+    }
     catch { toast.error('Грешка при зареждане') }
     setLoading(false)
   }
 
-  useEffect(() => { load() }, [])
+  useEffect(() => { void load() }, [page, sortKey, sortDirection])
+
+  function resetPaging() {
+    setSearchMode(false)
+    setCursors([null])
+    setPage(1)
+    if (page === 1) void load(null)
+  }
+
+  async function runSearch() {
+    if (!query.trim()) {
+      resetPaging()
+      return
+    }
+    setLoading(true)
+    try {
+      const results = await searchBeneficiaries(query)
+      setData(results)
+      setTotal(results.length)
+      setHasNext(false)
+      setNextCursor(null)
+      setSearchMode(true)
+    } catch {
+      toast.error('Грешка при търсене')
+    }
+    setLoading(false)
+  }
+
+  function goNext() {
+    if (!hasNext || !nextCursor) return
+    setCursors(current => {
+      const next = current.slice(0, page)
+      next[page] = nextCursor
+      return next
+    })
+    setPage(current => current + 1)
+  }
 
   const filtered = query
     ? data.filter(b =>
@@ -122,7 +172,7 @@ export default function BeneficiariesPage() {
       const photoUrl = photoFile ? await prepareBeneficiaryPhoto(photoFile) : editing.photoUrl
       const record = {
         ...editing,
-        ...(!isNew ? { externalId: numericBeneficiaryId(editing) } : {}),
+        ...(!isNew ? { externalId: Number(numericBeneficiaryId(editing)) } : {}),
         ...(photoUrl ? { photoUrl } : {}),
       }
       if (isNew) {
@@ -131,7 +181,7 @@ export default function BeneficiariesPage() {
         await updateBeneficiary(editing.id!, record)
       }
       closeEditor()
-      await load()
+      resetPaging()
       toast.success(isNew ? 'Бенефициентът е добавен!' : 'Бенефициентът е обновен!')
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Грешка при запис')
@@ -144,7 +194,7 @@ export default function BeneficiariesPage() {
       for (const id of ids) {
         await deleteBeneficiary(id)
       }
-      toast.success(`${ids.length} записа изтрити`); load()
+      toast.success(`${ids.length} записа изтрити`); resetPaging()
     } catch { toast.error('Грешка при изтриване') }
   }
 
@@ -186,18 +236,21 @@ export default function BeneficiariesPage() {
         <div className="box-body">
           <div className="flex items-center gap-2 mb-4">
             <div className="flex items-center gap-2 flex-1">
-              <input type="text" placeholder="Търси по имена, ЕГН, имейл или телефон..."
+              <input type="text" placeholder="Търси по имена, ID, ЕГН, имейл или телефон..."
                 className="form-control max-w-xs" value={query}
-                onChange={e => setQuery(e.target.value)} />
-              <Search size={16} className="text-gray-400" />
+                onChange={e => { setQuery(e.target.value); if (!e.target.value) resetPaging() }}
+                onKeyDown={e => { if (e.key === 'Enter') void runSearch() }} />
+              <button type="button" onClick={() => void runSearch()} className="btn-default px-3" title="Търси">
+                <Search size={16} />
+              </button>
             </div>
             <select className="form-control !w-auto" value={sortKey}
-              onChange={e => setSortKey(e.target.value as SortKey)} aria-label="Сортиране на бенефициентите">
+              onChange={e => { setSortKey(e.target.value as SortKey); setCursors([null]); setPage(1) }} aria-label="Сортиране на бенефициентите">
               <option value="id">Сортиране по ID</option>
               <option value="firstName">Сортиране по име</option>
               <option value="lastName">Сортиране по фамилия</option>
             </select>
-            <button type="button" onClick={() => setSortDirection(v => v === 'asc' ? 'desc' : 'asc')}
+            <button type="button" onClick={() => { setSortDirection(v => v === 'asc' ? 'desc' : 'asc'); setCursors([null]); setPage(1) }}
               className="btn-default px-3" title={sortDirection === 'asc' ? 'Възходящо' : 'Низходящо'}>
               {sortDirection === 'asc' ? <ArrowDownAZ size={18} /> : <ArrowUpAZ size={18} />}
             </button>
@@ -206,7 +259,12 @@ export default function BeneficiariesPage() {
             </button>
           </div>
           <DataTable columns={columns} data={sorted} loading={loading}
-            onEdit={openEdit} onDelete={handleDelete} />
+            onEdit={openEdit} onDelete={handleDelete}
+            serverPagination={searchMode ? undefined : {
+              page, total, perPage: PAGE_SIZE, hasNext,
+              onNext: goNext,
+              onPrevious: () => setPage(current => Math.max(1, current - 1)),
+            }} />
         </div>
       </div>
 

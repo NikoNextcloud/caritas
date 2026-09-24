@@ -39,9 +39,13 @@ function StatCard({ label, value, icon: Icon, color, href }: {
 export default function DashboardPage() {
   const [stats, setStats] = useState<Stats | null>(null)
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
 
   useEffect(() => {
-    getDashboardStats().then(s => { setStats(s); setLoading(false) })
+    getDashboardStats()
+      .then(s => setStats(s))
+      .catch(() => setError('Данните не могат да бъдат заредени. Проверете Firebase лимита и опитайте отново.'))
+      .finally(() => setLoading(false))
   }, [])
 
   return (
@@ -61,6 +65,8 @@ export default function DashboardPage() {
             <div key={i} className="box p-4 animate-pulse h-20 bg-gray-100 rounded" />
           ))}
         </div>
+      ) : error ? (
+        <div className="box p-5 text-sm text-red-700 bg-red-50 border-red-200">{error}</div>
       ) : stats && (
         <>
           {/* Stats Grid */}

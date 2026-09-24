@@ -8,7 +8,8 @@ import {
 import { createUserWithEmailAndPassword, getAuth, signOut } from 'firebase/auth'
 import { deleteApp, initializeApp } from 'firebase/app'
 import { db, firebaseConfig } from '@/lib/firebase'
-import type { UserRole } from '@/types'
+import { subscribeToOnlineUsers } from '@/lib/db'
+import type { AdminUser, UserRole } from '@/types'
 import { Plus, Shield } from 'lucide-react'
 import toast, { Toaster } from 'react-hot-toast'
 
@@ -39,6 +40,8 @@ export default function UsersPage() {
   const [form, setForm] = useState(EMPTY)
   const [saving, setSaving] = useState(false)
   const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [presence, setPresence] = useState<AdminUser[]>([])
+  const [clock, setClock] = useState(Date.now())
 
   async function load() {
     setLoading(true)
@@ -54,6 +57,16 @@ export default function UsersPage() {
   }
 
   useEffect(() => { load() }, [])
+  useEffect(() => subscribeToOnlineUsers(setPresence, () => setPresence([])), [])
+  useEffect(() => {
+    const timer = window.setInterval(() => setClock(Date.now()), 30_000)
+    return () => window.clearInterval(timer)
+  }, [])
+
+  const activeUserIds = new Set(presence.filter(item => {
+    const seenAt = Date.parse(item.lastSeen || '')
+    return item.isOnline && Number.isFinite(seenAt) && clock - seenAt < 5 * 60_000
+  }).map(item => item.uid))
 
   async function handleAdd() {
     if (!form.email || !form.displayName || !form.password) {
@@ -135,7 +148,7 @@ export default function UsersPage() {
         </div>
         <div className="box-body">
           <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded text-sm text-blue-700">
-            <strong>Роли:</strong> Администратор — вижда и управлява всичко · Потребител — вижда само създадените от него или възложените му записи
+            <strong>Роли:</strong> Администратор — вижда и управлява всичко · Потребител — вижда всички бенефициенти, работодатели, доброволци и дарители; редактира само създадените от него или възложените му записи
           </div>
 
           {/* Bulk delete bar */}
@@ -197,8 +210,8 @@ export default function UsersPage() {
                       </td>
                       <td className="px-3 py-2">
                         <span className={`text-xs text-white px-2 py-0.5 rounded font-medium
-                          ${u.isOnline ? 'bg-[#00a65a]' : 'bg-gray-400'}`}>
-                          {u.isOnline ? 'Online' : 'Offline'}
+                          ${activeUserIds.has(u.uid) ? 'bg-[#00a65a]' : 'bg-gray-400'}`}>
+                          {activeUserIds.has(u.uid) ? 'Online' : 'Offline'}
                         </span>
                       </td>
                       <td className="px-3 py-2 text-gray-500 text-xs">

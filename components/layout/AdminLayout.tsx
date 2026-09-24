@@ -7,7 +7,7 @@ import {
   Bell, Briefcase, CheckSquare, ChevronRight, Download, HandHeart,
   HeartHandshake, LayoutDashboard, LogOut, Menu, Upload, User, Users,
 } from 'lucide-react'
-import { getAdminUser, logout, onAuth, setOnlineStatus } from '@/lib/auth'
+import { getAdminUser, logout, onAuth, startPresenceTracking } from '@/lib/auth'
 import { markAllNotificationsRead, markNotificationRead, subscribeToNotifications, subscribeToOnlineUsers } from '@/lib/db'
 import type { AdminUser, Notification, UserRole } from '@/types'
 import toast from 'react-hot-toast'
@@ -53,6 +53,8 @@ export default function AdminLayout({ children, userName = 'Потребител
   const [role, setRole] = useState<UserRole>('user')
   const [authReady, setAuthReady] = useState(false)
   const [onlineUsers, setOnlineUsers] = useState<AdminUser[]>([])
+  const [presenceName, setPresenceName] = useState('')
+  const [clock, setClock] = useState(Date.now())
   const prevUnreadCount = useRef(0)
 
   const unreadCount = notifications.filter(n => !n.isRead).length
@@ -62,20 +64,28 @@ export default function AdminLayout({ children, userName = 'Потребител
       router.replace('/auth/login')
       return
     }
-    await setOnlineStatus(true)
     const profile = await getAdminUser(user.uid)
-    setDisplayName(profile?.displayName || user.displayName || user.email || userName)
+    const name = profile?.displayName || user.displayName || user.email || userName
+    setDisplayName(name)
+    setPresenceName(name)
     setRole(profile?.role || 'user')
-    if ((profile?.role || 'user') !== 'admin') {
-      setOnlineUsers(profile ? [{ ...profile, isOnline: true }] : [])
-    }
     setAuthReady(true)
   }), [router, userName])
 
   useEffect(() => {
-    if (!authReady || role !== 'admin') return
+    if (!authReady) return
     return subscribeToOnlineUsers(setOnlineUsers, () => setOnlineUsers([]))
-  }, [authReady, role])
+  }, [authReady])
+
+  useEffect(() => {
+    if (!authReady || !presenceName) return
+    return startPresenceTracking(presenceName)
+  }, [authReady, presenceName])
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setClock(Date.now()), 30_000)
+    return () => window.clearInterval(timer)
+  }, [])
 
   useEffect(() => {
     if (!authReady) return
@@ -106,6 +116,11 @@ export default function AdminLayout({ children, userName = 'Потребител
   function isActive(href: string) {
     return pathname === href || pathname.startsWith(href + '/')
   }
+
+  const activeOnlineUsers = onlineUsers.filter(user => {
+    const seenAt = Date.parse(user.lastSeen || '')
+    return user.isOnline && Number.isFinite(seenAt) && clock - seenAt < 5 * 60_000
+  })
 
   return (
     <div className="flex h-screen overflow-hidden" style={{ background: 'var(--content-bg)' }}>
@@ -169,9 +184,9 @@ export default function AdminLayout({ children, userName = 'Потребител
         <div className="border-t border-white/10 px-4 py-3">
           <p className="text-[10px] uppercase tracking-wider font-bold mb-2" style={{ color: 'var(--sidebar-text)' }}>Потребители на линия</p>
           <div className="space-y-2 max-h-28 overflow-y-auto">
-            {onlineUsers.length === 0 ? (
+            {activeOnlineUsers.length === 0 ? (
               <p className="text-xs" style={{ color: 'var(--sidebar-text)' }}>Няма потребители на линия</p>
-            ) : onlineUsers.map(user => (
+            ) : activeOnlineUsers.map(user => (
               <div key={user.uid} className="flex items-center gap-2 min-w-0">
                 <span className="w-2 h-2 rounded-full bg-[#00a65a] flex-shrink-0" />
                 <span className="text-xs text-white truncate" title={user.displayName}>{user.displayName}</span>

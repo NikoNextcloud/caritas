@@ -17,17 +17,29 @@ interface Props<T extends { id: string }> {
   onDelete?: (ids: string[]) => void
   selectable?: boolean
   loading?: boolean
+  serverPagination?: {
+    page: number
+    total: number
+    perPage: number
+    hasNext: boolean
+    onNext: () => void
+    onPrevious: () => void
+  }
 }
 
 export default function DataTable<T extends { id: string }>({
-  columns, data, perPage = 20, onEdit, onDelete, selectable = true, loading = false
+  columns, data, perPage = 20, onEdit, onDelete, selectable = true, loading = false,
+  serverPagination,
 }: Props<T>) {
   const [page, setPage] = useState(1)
   const [selected, setSelected] = useState<Set<string>>(new Set())
 
-  const totalPages = Math.ceil(data.length / perPage)
-  const start = (page - 1) * perPage
-  const pageData = data.slice(start, start + perPage)
+  const activePage = serverPagination?.page ?? page
+  const activePerPage = serverPagination?.perPage ?? perPage
+  const totalItems = serverPagination?.total ?? data.length
+  const totalPages = Math.ceil(totalItems / activePerPage)
+  const start = (activePage - 1) * activePerPage
+  const pageData = serverPagination ? data : data.slice(start, start + activePerPage)
 
   function toggleAll() {
     if (selected.size === pageData.length) {
@@ -146,12 +158,24 @@ export default function DataTable<T extends { id: string }>({
       </div>
 
       {/* Pagination */}
-      {totalPages > 1 && (
+      {(totalPages > 1 || serverPagination?.hasNext) && (
         <div className="flex items-center justify-between mt-4 px-1">
           <p className="text-sm text-gray-500">
-            Показване {start + 1}–{Math.min(start + perPage, data.length)} от {data.length} записа
+            Показване {totalItems === 0 ? 0 : start + 1}–{Math.min(start + pageData.length, totalItems)} от {totalItems} записа
           </p>
-          <div className="flex items-center gap-1">
+          {serverPagination ? (
+            <div className="flex items-center gap-2">
+              <button onClick={serverPagination.onPrevious} disabled={activePage === 1}
+                className="btn-default btn-sm disabled:opacity-40 disabled:cursor-not-allowed">
+                <ChevronLeft size={16} /> Назад
+              </button>
+              <span className="text-sm text-gray-600">Страница {activePage}{totalPages ? ` от ${totalPages}` : ''}</span>
+              <button onClick={serverPagination.onNext} disabled={!serverPagination.hasNext}
+                className="btn-default btn-sm disabled:opacity-40 disabled:cursor-not-allowed">
+                Напред <ChevronRight size={16} />
+              </button>
+            </div>
+          ) : <div className="flex items-center gap-1">
             <button onClick={() => setPage(1)} disabled={page === 1}
               className="p-1.5 rounded hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
               <ChevronsLeft size={16} />
@@ -191,7 +215,7 @@ export default function DataTable<T extends { id: string }>({
               className="p-1.5 rounded hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
               <ChevronsRight size={16} />
             </button>
-          </div>
+          </div>}
         </div>
       )}
     </div>

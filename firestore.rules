@@ -42,6 +42,12 @@ service cloud.firestore {
       );
     }
 
+    match /presence/{uid} {
+      allow read: if signedIn();
+      allow create, update: if signedIn() && request.auth.uid == uid;
+      allow delete: if admin() || (signedIn() && request.auth.uid == uid);
+    }
+
     match /beneficiaryRequests/{id} {
       allow read: if admin() || ownedByUser(resource.data);
       allow create: if canCreateOwned();
