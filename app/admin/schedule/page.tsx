@@ -99,7 +99,9 @@ export default function SchedulePage() {
     let dark = true
     for (const item of filtered) {
       if (!groups.has(item.date)) {
-        groups.set(item.date, dark ? '!bg-gray-100' : '!bg-white')
+        groups.set(item.date, dark
+          ? '!bg-slate-200 !border-slate-400 [&>td]:!text-slate-950'
+          : '!bg-white !border-gray-300 [&>td]:!text-gray-900')
         dark = !dark
       }
     }
@@ -180,7 +182,7 @@ export default function SchedulePage() {
             <div className="form-group mb-0"><label className="form-label">Месец</label><input type="month" className="form-control" value={month} onChange={event => setMonth(event.target.value)} /></div>
             <div className="form-group mb-0 flex-1 min-w-[240px] max-w-lg"><label className="form-label">Търсене</label><div className="relative"><input className="form-control pr-9" placeholder="Описание, телефон или изпълнител" value={search} onChange={event => setSearch(event.target.value)} /><Search size={16} className="absolute right-3 top-2.5 text-gray-400" /></div></div>
           </div>
-          <DataTable key={`${month}:${search}`} perPage={25} loading={loading} data={filtered} rowClassName={row => dateBackground.get(row.date) || '!bg-white'} selectable={isAdmin} onDelete={isAdmin ? remove : undefined} onEdit={row => { setEditing({ ...row }); setIsNew(false); setModal(true) }} columns={[
+          <DataTable key={`${month}:${search}`} perPage={25} loading={loading} data={filtered} rowClassName={row => dateBackground.get(row.date) || '!bg-white !border-gray-300 [&>td]:!text-gray-900'} selectable={isAdmin} onDelete={isAdmin ? remove : undefined} onEdit={row => { setEditing({ ...row }); setIsNew(false); setModal(true) }} columns={[
             { key: 'date', label: 'Ден', width: '120px', render: row => <span className="font-medium whitespace-nowrap">{formatDate(row.date)}</span> },
             { key: 'time', label: 'Час', width: '80px', render: row => <span className="font-medium text-[var(--brand-primary)] whitespace-nowrap">{row.time || 'Цял ден'}</span> },
             { key: 'description', label: 'Описание' },

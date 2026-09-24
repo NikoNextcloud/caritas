@@ -7,7 +7,8 @@ import UserAssignment from '@/components/ui/UserAssignment'
 import { getBeneficiariesPage, searchBeneficiaries, addBeneficiary, updateBeneficiary, deleteBeneficiary } from '@/lib/db'
 import { prepareBeneficiaryPhoto, validateBeneficiaryPhoto } from '@/lib/beneficiary-images'
 import type { Beneficiary } from '@/types'
-import { ArrowDownAZ, ArrowUpAZ, ImageIcon, Plus, Search, Upload } from 'lucide-react'
+import { ArrowDownAZ, ArrowUpAZ, FileText, ImageIcon, Plus, Search, Upload } from 'lucide-react'
+import Link from 'next/link'
 import toast, { Toaster } from 'react-hot-toast'
 import type { DocumentData, DocumentSnapshot } from 'firebase/firestore'
 
@@ -182,7 +183,7 @@ export default function BeneficiariesPage() {
       }
       closeEditor()
       resetPaging()
-      toast.success(isNew ? 'Бенефициентът е добавен!' : 'Бенефициентът е обновен!')
+      toast.success(isNew ? 'Бенефициентът е добавен. Документите са готови за автоматично попълване.' : 'Бенефициентът е обновен!')
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Грешка при запис')
     }
@@ -219,6 +220,14 @@ export default function BeneficiariesPage() {
     { key: 'email', label: 'Имейл' },
     { key: 'phone', label: 'Телефон' },
     { key: 'city', label: 'Град' },
+    {
+      key: 'documents', label: 'Документи', width: '120px', render: (r: Beneficiary) => (
+        <Link href={`/admin/beneficiaries/${encodeURIComponent(r.id)}/documents`}
+          className="inline-flex items-center gap-1.5 rounded border border-gray-300 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-800 hover:border-[var(--brand-primary)] hover:text-[var(--brand-primary)]">
+          <FileText size={14} /> Отвори
+        </Link>
+      ),
+    },
     { key: 'createdAt', label: 'Дата', render: (r: Beneficiary) => r.createdAt?.split('T')[0] ?? '' },
   ]
 

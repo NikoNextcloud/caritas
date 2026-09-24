@@ -55,8 +55,92 @@ export interface Beneficiary extends OwnedRecord {
   lastEdited?: string
   sourceData?: Record<string, string | number | boolean | null>
   notes?: string
+  documentProfile?: BeneficiaryDocumentProfile
   createdAt: string
   updatedAt: string
+}
+
+export interface FamilyMember {
+  name?: string
+  gender?: string
+  birthDateOrId?: string
+  relation?: string
+}
+
+export interface BeneficiaryDocumentProfile {
+  registrationDate?: string
+  interviewer?: string
+  registrationPlace?: string
+  householdSummary?: string
+  familyMembers?: FamilyMember[]
+  requestedSupport?: string
+  socialStatuses?: string
+  residenceStatus?: string
+  socialServices?: string
+  socialActivities?: string
+
+  careerLivingSituation?: string
+  careerDependants?: string
+  careerPhysicalLimitations?: string
+  careerDrivingLicence?: string
+  careerTravelReadiness?: string
+  careerCityOrientation?: string
+  careerLabourLawKnowledge?: string
+  careerEmployerMeeting?: string
+  careerComputerSkills?: string
+  careerBulgarianLevel?: string
+  careerWantsBulgarian?: string
+  careerOtherLanguages?: string
+  careerHobbies?: string
+  careerEducation?: string
+  careerQualificationNeeds?: string
+  careerDesiredWork?: string
+  careerDesiredSalary?: string
+  careerJobPriorities?: string
+  careerAvailability?: string
+  careerDecisionTime?: string
+  careerExperienceAbroad?: string
+  careerExperienceBulgaria?: string
+  careerAdditionalInfo?: string
+
+  humanitarianFamilySituation?: string
+  humanitarianSocialGroup?: string
+  humanitarianHealthStatus?: string
+  humanitarianIncomeSources?: string
+  humanitarianDiseaseDescription?: string
+  humanitarianLivingConditions?: string
+  humanitarianCaseInfo?: string
+
+  caseWorker?: string
+  planDate?: string
+  translationLanguage?: string
+  translator?: string
+  bulgarianLevel?: string
+  otherLanguages?: string
+  careerOrientation?: string
+  skillsAndInterests?: string
+  computerSkills?: string
+  healthStatus?: string
+  environmentOrientation?: string
+  socialContacts?: string
+  emotionalHealth?: string
+  longTermGoal?: string
+  strengths?: string
+  skills?: string
+  barriers?: string
+  previousExperience?: string
+  serviceProvider?: string
+  planDeadline?: string
+
+  cvProfessionalTitle?: string
+  cvSummary?: string
+  cvDesiredPosition?: string
+  cvSkills?: string
+  cvLanguages?: string
+  cvEducation?: string
+  cvWorkExperience?: string
+  cvCourses?: string
+  cvAdditionalInfo?: string
 }
 
 // ---- ЗАЯВКА ЗА ДЕЙНОСТ ----
