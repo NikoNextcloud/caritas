@@ -21,7 +21,6 @@ const ACTION_LABELS: Record<AuditAction, string> = {
 
 const ROLE_LABELS: Record<UserRole, string> = {
   admin: 'Администратор',
-  editor: 'Редактор',
   user: 'Потребител',
   operator: 'Оператор',
   viewer: 'Преглед',

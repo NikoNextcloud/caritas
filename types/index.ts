@@ -2,7 +2,7 @@
 // CARITAS ADMIN — TypeScript Types
 // ============================================================
 
-export type UserRole = 'admin' | 'editor' | 'user' | 'operator' | 'viewer'
+export type UserRole = 'admin' | 'user' | 'operator' | 'viewer'
 
 export type AuditAction = 'login' | 'logout' | 'view' | 'create' | 'update' | 'delete' | 'import' | 'role_change'
 

@@ -15,14 +15,6 @@ service cloud.firestore {
       return signedIn() && role() == 'admin';
     }
 
-    function editor() {
-      return signedIn() && role() == 'editor';
-    }
-
-    function privileged() {
-      return admin() || editor();
-    }
-
     function ownedByUser(data) {
       return signedIn() && (
         data.createdByUid == request.auth.uid ||
@@ -31,18 +23,18 @@ service cloud.firestore {
     }
 
     function canCreateOwned() {
-      return privileged() || (signedIn() && request.resource.data.createdByUid == request.auth.uid);
+      return admin() || (signedIn() && request.resource.data.createdByUid == request.auth.uid);
     }
 
     function canUpdateOwned() {
-      return privileged() || (
+      return admin() || (
         ownedByUser(resource.data) &&
         request.resource.data.createdByUid == resource.data.createdByUid
       );
     }
 
     match /users/{uid} {
-      allow read: if privileged() || (signedIn() && request.auth.uid == uid);
+      allow read: if admin() || (signedIn() && request.auth.uid == uid);
       allow create, delete: if admin();
       allow update: if admin() || (
         signedIn() && request.auth.uid == uid &&
@@ -57,7 +49,7 @@ service cloud.firestore {
     }
 
     match /beneficiaryRequests/{id} {
-      allow read: if privileged() || ownedByUser(resource.data);
+      allow read: if admin() || ownedByUser(resource.data);
       allow create: if canCreateOwned();
       allow update: if canUpdateOwned();
       allow delete: if admin();
@@ -71,7 +63,7 @@ service cloud.firestore {
     }
 
     match /tasks/{id} {
-      allow read: if privileged() || ownedByUser(resource.data);
+      allow read: if admin() || ownedByUser(resource.data);
       allow create: if canCreateOwned();
       allow update: if canUpdateOwned();
       allow delete: if admin();
@@ -80,8 +72,8 @@ service cloud.firestore {
     match /schedule/{id} {
       allow read: if signedIn();
       allow create: if canCreateOwned();
-      allow update: if privileged() || (signedIn() &&
-        request.resource.data.createdByUid == resource.data.createdByUid);
+      allow update: if signedIn() &&
+        request.resource.data.createdByUid == resource.data.createdByUid;
       allow delete: if admin();
     }
 
@@ -107,7 +99,7 @@ service cloud.firestore {
     }
 
     match /notifications/{id} {
-      allow read: if privileged() || ownedByUser(resource.data);
+      allow read: if admin() || ownedByUser(resource.data);
       allow create: if canCreateOwned();
       allow update: if admin() || ownedByUser(resource.data);
       allow delete: if admin();

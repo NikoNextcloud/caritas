@@ -39,8 +39,6 @@ async function loadCurrentAccess() {
     name: data.displayName || user.displayName || user.email || 'Потребител',
     role,
     isAdmin: role === 'admin',
-    isEditor: role === 'editor',
-    canEditAll: role === 'admin' || role === 'editor',
   }
 }
 
@@ -76,7 +74,7 @@ async function visibleCollection<T>(collectionName: string): Promise<T[]> {
   if (cached && cached.expiresAt > Date.now()) return cached.data as T[]
 
   const ref = collection(db, collectionName)
-  if (access.canEditAll || sharedReadCollections.has(collectionName)) {
+  if (access.isAdmin || sharedReadCollections.has(collectionName)) {
     const snap = await getDocs(ref)
     const data = snap.docs.map(d => ({ id: d.id, ...d.data() } as T))
     collectionCache.set(cacheKey, { data, expiresAt: Date.now() + COLLECTION_CACHE_MS })
@@ -212,7 +210,7 @@ export async function getRequestsPage(
   cursor: DocumentSnapshot<DocumentData> | null = null,
 ): Promise<CursorPage<BeneficiaryRequest>> {
   const access = await currentAccess()
-  if (!access.canEditAll) {
+  if (!access.isAdmin) {
     const visible = await visibleCollection<BeneficiaryRequest>('beneficiaryRequests')
     visible.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''))
     return {
@@ -624,7 +622,7 @@ export async function getDashboardStats() {
     getCountFromServer(donorsCol),
   ])
 
-  if (access.canEditAll) {
+  if (access.isAdmin) {
     const [allRequests, confirmed, pending, rejected, allTasks] = await Promise.all([
       getCountFromServer(requestsCol),
       getCountFromServer(query(requestsCol, where('status', '==', 'Потвърдено'))),

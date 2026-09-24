@@ -24,10 +24,9 @@ interface AdminUserRow {
   createdAt: string
 }
 
-const ROLES: UserRole[] = ['admin', 'editor', 'user']
+const ROLES: UserRole[] = ['admin', 'user']
 const roleLabel: Record<UserRole, string> = {
   admin:    'Администратор',
-  editor:   'Редактор',
   user:     'Потребител',
   operator: 'Оператор',
   viewer:   'Преглед',
@@ -152,7 +151,7 @@ export default function UsersPage() {
         </div>
         <div className="box-body">
           <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded text-sm text-blue-700">
-            <strong>Роли:</strong> Администратор — пълен достъп, потребители, импорт и история · Редактор — вижда и редактира всички оперативни записи, но няма административните секции · Потребител — редактира само създадените от него или възложените му записи
+            <strong>Роли:</strong> Администратор — вижда и управлява всичко, включително историята · Потребител — вижда всички бенефициенти, работодатели, доброволци и дарители; редактира само създадените от него или възложените му записи
           </div>
 
           {/* Bulk delete bar */}
