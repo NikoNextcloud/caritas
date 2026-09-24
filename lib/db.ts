@@ -8,7 +8,7 @@ import { db } from './firebase'
 import { auth } from './firebase'
 import type {
   BeneficiaryRequest, Beneficiary, Task, Employer,
-  Notification, SearchParams, RequestStatus, Donor, Volunteer, AdminUser
+  Notification, SearchParams, RequestStatus, Donor, Volunteer, AdminUser, ScheduleEntry
 } from '@/types'
 
 const now = () => new Date().toISOString()
@@ -62,6 +62,7 @@ const sharedReadCollections = new Set([
   'employers',
   'volunteers',
   'donors',
+  'schedule',
 ])
 
 async function visibleCollection<T>(collectionName: string): Promise<T[]> {
@@ -341,6 +342,70 @@ export async function updateTask(id: string, data: Partial<Task>) {
 export async function deleteTask(id: string) {
   await deleteDoc(doc(tasksCol, id))
   clearCollectionCache('tasks')
+}
+
+// ── SCHEDULE ──────────────────────────────────────────────────
+export const scheduleCol = collection(db, 'schedule')
+
+export async function getScheduleEntries(month: string) {
+  await currentAccess()
+  const start = `${month}-01`
+  const nextMonthDate = new Date(`${start}T00:00:00Z`)
+  nextMonthDate.setUTCMonth(nextMonthDate.getUTCMonth() + 1)
+  const end = nextMonthDate.toISOString().slice(0, 10)
+  const snap = await getDocs(query(
+    scheduleCol,
+    where('date', '>=', start),
+    where('date', '<', end),
+    orderBy('date', 'asc'),
+    limit(600),
+  ))
+  return snap.docs
+    .map(item => ({ id: item.id, ...item.data() } as ScheduleEntry))
+    .sort((a, b) => `${a.date} ${a.time}`.localeCompare(`${b.date} ${b.time}`, 'bg'))
+}
+
+export async function addScheduleEntry(data: Omit<ScheduleEntry, 'id' | 'createdAt' | 'updatedAt'>) {
+  const ref = await addDoc(scheduleCol, { ...data, ...await ownership(), createdAt: now(), updatedAt: now() })
+  clearCollectionCache('schedule')
+  return ref.id
+}
+
+export async function updateScheduleEntry(id: string, data: Partial<ScheduleEntry>) {
+  await updateDoc(doc(scheduleCol, id), { ...data, updatedAt: now() })
+  clearCollectionCache('schedule')
+}
+
+export async function deleteScheduleEntries(ids: string[]) {
+  for (let offset = 0; offset < ids.length; offset += 400) {
+    const batch = writeBatch(db)
+    ids.slice(offset, offset + 400).forEach(id => batch.delete(doc(scheduleCol, id)))
+    await batch.commit()
+  }
+  clearCollectionCache('schedule')
+}
+
+export async function importScheduleEntries(entries: Array<Pick<ScheduleEntry, 'date' | 'time' | 'description' | 'phone' | 'performers' | 'sourceRow'>>) {
+  const access = await currentAccess()
+  if (!access.isAdmin) throw new Error('Само администратор може да импортира график')
+  const importedAt = now()
+  for (let offset = 0; offset < entries.length; offset += 400) {
+    const batch = writeBatch(db)
+    for (const entry of entries.slice(offset, offset + 400)) {
+      const row = entry.sourceRow || offset + 1
+      const id = `schedule-2026-plovdiv-${String(row).padStart(5, '0')}`
+      batch.set(doc(scheduleCol, id), {
+        ...entry,
+        createdByUid: access.uid,
+        createdByName: access.name,
+        createdAt: importedAt,
+        updatedAt: importedAt,
+      }, { merge: true })
+    }
+    await batch.commit()
+  }
+  clearCollectionCache('schedule')
+  return entries.length
 }
 
 // ── EMPLOYERS ─────────────────────────────────────────────────

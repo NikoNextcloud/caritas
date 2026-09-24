@@ -4,7 +4,7 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname, useRouter } from 'next/navigation'
 import {
-  Bell, Briefcase, CheckSquare, ChevronRight, Download, HandHeart,
+  Bell, Briefcase, CalendarDays, CheckSquare, ChevronRight, Download, HandHeart,
   HeartHandshake, LayoutDashboard, LogOut, Menu, Upload, User, Users,
 } from 'lucide-react'
 import { getAdminUser, logout, onAuth, startPresenceTracking } from '@/lib/auth'
@@ -23,6 +23,7 @@ interface MenuItem {
 const MENU_ITEMS: MenuItem[] = [
   { label: 'Основно табло', href: '/admin/dashboard', icon: LayoutDashboard },
   { label: 'Списък Задачи', href: '/admin/tasks', icon: CheckSquare },
+  { label: 'График', href: '/admin/schedule', icon: CalendarDays },
   {
     label: 'Бенефициенти', icon: Users, children: [
       { label: 'Бенефициенти', href: '/admin/beneficiaries' },

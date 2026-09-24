@@ -118,6 +118,19 @@ export interface Task extends OwnedRecord {
   updatedAt: string
 }
 
+// ---- ГРАФИК ----
+export interface ScheduleEntry extends OwnedRecord {
+  id: string
+  date: string
+  time: string
+  description: string
+  phone?: string
+  performers?: string
+  sourceRow?: number
+  createdAt: string
+  updatedAt: string
+}
+
 // ---- РАБОТОДАТЕЛ ----
 export interface Employer extends OwnedRecord {
   id: string

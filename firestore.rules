@@ -69,6 +69,14 @@ service cloud.firestore {
       allow delete: if admin();
     }
 
+    match /schedule/{id} {
+      allow read: if signedIn();
+      allow create: if canCreateOwned();
+      allow update: if signedIn() &&
+        request.resource.data.createdByUid == resource.data.createdByUid;
+      allow delete: if admin();
+    }
+
     match /employers/{id} {
       allow read: if signedIn();
       allow create: if canCreateOwned();
