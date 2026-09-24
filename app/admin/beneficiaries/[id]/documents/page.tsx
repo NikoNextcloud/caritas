@@ -1,23 +1,25 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
+import type { ReactNode } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import AdminLayout from '@/components/layout/AdminLayout'
 import { getBeneficiary, updateBeneficiary } from '@/lib/db'
 import { downloadBeneficiaryDocument, type BeneficiaryDocumentKind } from '@/lib/beneficiary-documents'
-import type { Beneficiary, BeneficiaryDocumentProfile, FamilyMember } from '@/types'
-import { ArrowLeft, Download, FileText, Save, UserRound } from 'lucide-react'
+import type { Beneficiary, BeneficiaryDocumentProfile, CvEducationEntry, CvExperience, CvReference, FamilyMember } from '@/types'
+import { ArrowLeft, Download, FileText, Plus, Save, Trash2, UserRound } from 'lucide-react'
 import toast, { Toaster } from 'react-hot-toast'
 
 type ProfileKey = keyof BeneficiaryDocumentProfile
-type TabKey = 'registration' | 'career' | 'humanitarian' | 'plan'
+type TabKey = 'registration' | 'career' | 'humanitarian' | 'plan' | 'cv'
 
 const TAB_LABELS: Record<TabKey, string> = {
   registration: 'Регистрация и семейство',
   career: 'Кариерна оценка',
   humanitarian: 'Хуманитарна оценка',
-  plan: 'Индивидуален план и CV',
+  plan: 'Индивидуален план',
+  cv: 'CV',
 }
 
 const CAREER_FIELDS: Array<[ProfileKey, string]> = [
@@ -77,15 +79,6 @@ const PLAN_FIELDS: Array<[ProfileKey, string]> = [
   ['previousExperience', 'Предишен професионален опит'],
   ['serviceProvider', 'Предоставящ услугата'],
   ['planDeadline', 'Срок за изпълнение'],
-  ['cvProfessionalTitle', 'CV — професионално заглавие'],
-  ['cvSummary', 'CV — професионален профил'],
-  ['cvDesiredPosition', 'CV — желана позиция'],
-  ['cvSkills', 'CV — ключови умения'],
-  ['cvLanguages', 'CV — езици'],
-  ['cvEducation', 'CV — образование и квалификация'],
-  ['cvWorkExperience', 'CV — трудов опит'],
-  ['cvCourses', 'CV — курсове и обучения'],
-  ['cvAdditionalInfo', 'CV — допълнителна информация'],
 ]
 
 function fullName(beneficiary: Beneficiary) {
@@ -121,6 +114,13 @@ export default function BeneficiaryDocumentsPage() {
           planDate: new Date().toISOString().slice(0, 10),
           longTermGoal: 'Осигуряване на трудова заетост',
           serviceProvider: 'Каритас Витания',
+          cvName: fullName(result),
+          cvPhone: result.phone || '',
+          cvEmail: result.email || '',
+          cvAddress: result.currentAddress || result.address || result.city || '',
+          cvProfessionalTitle: result.documentProfile?.careerDesiredWork || '',
+          cvSkills: result.documentProfile?.skills || result.documentProfile?.skillsAndInterests || result.documentProfile?.careerComputerSkills || '',
+          cvLanguages: result.documentProfile?.otherLanguages || result.documentProfile?.careerOtherLanguages || '',
           cvEducation: result.education || '',
           cvWorkExperience: result.workExperience || result.experience || '',
           ...result.documentProfile,
@@ -201,7 +201,7 @@ export default function BeneficiaryDocumentsPage() {
             <DocumentButton label="Кариерна карта" active={generating === 'career-card'} onClick={() => generate('career-card')} />
             <DocumentButton label="Хуманитарна карта" active={generating === 'humanitarian-card'} onClick={() => generate('humanitarian-card')} />
             <DocumentButton label="Индивидуален план" active={generating === 'individual-plan'} onClick={() => generate('individual-plan')} />
-            <DocumentButton label="Автобиография" active={generating === 'cv'} onClick={() => generate('cv')} />
+            <DocumentButton label="CV по шаблона (PDF)" active={generating === 'cv'} onClick={() => generate('cv')} />
           </div>
           <p className="text-xs text-gray-500 mt-3">Системата използва само записаните данни. Непопълнените специфични полета остават празни — не се добавя информация по предположение.</p>
         </div>
@@ -221,6 +221,7 @@ export default function BeneficiaryDocumentsPage() {
           {tab === 'career' && <FieldGrid fields={CAREER_FIELDS} profile={profile} setField={setField} />}
           {tab === 'humanitarian' && <FieldGrid fields={HUMANITARIAN_FIELDS} profile={profile} setField={setField} />}
           {tab === 'plan' && <FieldGrid fields={PLAN_FIELDS} profile={profile} setField={setField} />}
+          {tab === 'cv' && <CvForm beneficiary={beneficiary} profile={profile} updateProfile={changes => setProfile(current => ({ ...current, ...changes }))} generating={generating === 'cv'} onGenerate={() => generate('cv')} />}
           <div className="flex justify-end border-t border-gray-200 mt-5 pt-4">
             <button type="button" className="btn-primary" disabled={saving} onClick={save}><Save size={16} /> {saving ? 'Запис...' : 'Запази данните'}</button>
           </div>
@@ -296,6 +297,148 @@ function RegistrationForm({ beneficiary, profile, setField, setFamilyMember, mem
       </div>
     </div>
   </div>
+}
+
+function CvForm({ beneficiary, profile, updateProfile, generating, onGenerate }: {
+  beneficiary: Beneficiary
+  profile: BeneficiaryDocumentProfile
+  updateProfile: (changes: Partial<BeneficiaryDocumentProfile>) => void
+  generating: boolean
+  onGenerate: () => void
+}) {
+  const experiences: CvExperience[] = profile.cvExperiences !== undefined
+    ? profile.cvExperiences
+    : profile.cvWorkExperience ? [{ description: profile.cvWorkExperience }] : []
+  const education: CvEducationEntry[] = profile.cvEducationEntries !== undefined
+    ? profile.cvEducationEntries
+    : profile.cvEducation ? [{ qualification: profile.cvEducation }] : []
+  const references: CvReference[] = profile.cvReferences || []
+
+  const updateExperience = (index: number, changes: Partial<CvExperience>) => {
+    const next = [...experiences]
+    next[index] = { ...next[index], ...changes }
+    updateProfile({ cvExperiences: next })
+  }
+  const updateEducation = (index: number, changes: Partial<CvEducationEntry>) => {
+    const next = [...education]
+    next[index] = { ...next[index], ...changes }
+    updateProfile({ cvEducationEntries: next })
+  }
+  const updateReference = (index: number, changes: Partial<CvReference>) => {
+    const next = [...references]
+    next[index] = { ...next[index], ...changes }
+    updateProfile({ cvReferences: next })
+  }
+
+  return <div className="space-y-6">
+    <div className="rounded border border-gray-200 bg-gray-50 p-4">
+      <h3 className="font-semibold text-gray-900">CV по предоставения шаблон</h3>
+      <p className="text-sm text-gray-600 mt-1">Основните данни са заредени от профила на бенефициента. Промените тук важат само за CV-то и могат да се редактират преди генериране.</p>
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3 text-sm mt-3">
+        <Info label="Бенефициент" value={fullName(beneficiary)} />
+        <Info label="Телефон от профила" value={beneficiary.phone} />
+        <Info label="Имейл от профила" value={beneficiary.email} />
+        <Info label="Снимка" value={beneficiary.photoUrl ? 'Ще бъде използвана' : 'Ще се покажат инициали'} />
+      </div>
+    </div>
+
+    <CvSection title="Заглавна част и контакти">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <Field label="Име в CV" value={profile.cvName || fullName(beneficiary)} onChange={value => updateProfile({ cvName: value })} />
+        <Field label="Професионално заглавие" value={profile.cvProfessionalTitle || profile.cvDesiredPosition} onChange={value => updateProfile({ cvProfessionalTitle: value })} />
+        <Field label="Телефон" value={profile.cvPhone ?? beneficiary.phone} onChange={value => updateProfile({ cvPhone: value })} />
+        <Field label="Имейл" value={profile.cvEmail ?? beneficiary.email} onChange={value => updateProfile({ cvEmail: value })} />
+        <div className="md:col-span-2"><Field label="Адрес / град" value={profile.cvAddress ?? beneficiary.currentAddress ?? beneficiary.address ?? beneficiary.city} onChange={value => updateProfile({ cvAddress: value })} /></div>
+      </div>
+    </CvSection>
+
+    <CvSection title="За мен">
+      <textarea className="form-control resize-y min-h-28" rows={5} value={profile.cvSummary || ''} onChange={event => updateProfile({ cvSummary: event.target.value })} placeholder="Кратко професионално представяне, силни страни и цели" />
+    </CvSection>
+
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <CvSection title="Умения">
+        <textarea className="form-control resize-y min-h-32" rows={6} value={profile.cvSkills || ''} onChange={event => updateProfile({ cvSkills: event.target.value })} placeholder="По едно умение на ред" />
+      </CvSection>
+      <CvSection title="Езици">
+        <textarea className="form-control resize-y min-h-32" rows={6} value={profile.cvLanguages || profile.otherLanguages || ''} onChange={event => updateProfile({ cvLanguages: event.target.value })} placeholder="Напр. Български — B1" />
+      </CvSection>
+    </div>
+
+    <CvSection title="Опит" action={<AddButton label="Добави опит" onClick={() => updateProfile({ cvExperiences: [...experiences, {}] })} />}>
+      <div className="space-y-4">
+        {experiences.length === 0 && <EmptyState text="Няма добавен трудов опит." />}
+        {experiences.map((entry, index) => <RepeatCard key={index} title={`Позиция ${index + 1}`} onRemove={() => updateProfile({ cvExperiences: experiences.filter((_, itemIndex) => itemIndex !== index) })}>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <Field label="Длъжност" value={entry.position} onChange={value => updateExperience(index, { position: value })} />
+            <Field label="Работодател" value={entry.company} onChange={value => updateExperience(index, { company: value })} />
+            <Field label="От" value={entry.startDate} onChange={value => updateExperience(index, { startDate: value })} />
+            <Field label="До" value={entry.endDate} onChange={value => updateExperience(index, { endDate: value })} />
+            <div className="form-group md:col-span-2"><label className="form-label">Задачи и постижения</label><textarea className="form-control" rows={3} value={entry.description || ''} onChange={event => updateExperience(index, { description: event.target.value })} /></div>
+          </div>
+        </RepeatCard>)}
+      </div>
+    </CvSection>
+
+    <CvSection title="Образование" action={<AddButton label="Добави образование" onClick={() => updateProfile({ cvEducationEntries: [...education, {}] })} />}>
+      <div className="space-y-4">
+        {education.length === 0 && <EmptyState text="Няма добавено образование." />}
+        {education.map((entry, index) => <RepeatCard key={index} title={`Образование ${index + 1}`} onRemove={() => updateProfile({ cvEducationEntries: education.filter((_, itemIndex) => itemIndex !== index) })}>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <Field label="Учебно заведение" value={entry.institution} onChange={value => updateEducation(index, { institution: value })} />
+            <Field label="Специалност / квалификация" value={entry.qualification} onChange={value => updateEducation(index, { qualification: value })} />
+            <Field label="От" value={entry.startDate} onChange={value => updateEducation(index, { startDate: value })} />
+            <Field label="До" value={entry.endDate} onChange={value => updateEducation(index, { endDate: value })} />
+          </div>
+        </RepeatCard>)}
+      </div>
+    </CvSection>
+
+    <CvSection title="Препоръки / връзки" action={<AddButton label="Добави препоръка" onClick={() => updateProfile({ cvReferences: [...references, {}] })} />}>
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+        {references.length === 0 && <div className="xl:col-span-2"><EmptyState text="Няма добавени препоръки." /></div>}
+        {references.map((entry, index) => <RepeatCard key={index} title={`Препоръка ${index + 1}`} onRemove={() => updateProfile({ cvReferences: references.filter((_, itemIndex) => itemIndex !== index) })}>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <Field label="Име" value={entry.name} onChange={value => updateReference(index, { name: value })} />
+            <Field label="Организация / длъжност" value={entry.organization} onChange={value => updateReference(index, { organization: value })} />
+            <Field label="Телефон" value={entry.phone} onChange={value => updateReference(index, { phone: value })} />
+            <Field label="Имейл" value={entry.email} onChange={value => updateReference(index, { email: value })} />
+          </div>
+        </RepeatCard>)}
+      </div>
+    </CvSection>
+
+    <CvSection title="Допълнителна информация">
+      <textarea className="form-control resize-y min-h-24" rows={4} value={profile.cvAdditionalInfo || ''} onChange={event => updateProfile({ cvAdditionalInfo: event.target.value })} />
+    </CvSection>
+
+    <div className="rounded border border-[var(--brand-primary)] bg-red-50/50 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+      <div><p className="font-semibold text-gray-900">Готово за генериране</p><p className="text-sm text-gray-600">Бутонът записва актуалните полета и изтегля готовото CV като PDF.</p></div>
+      <button type="button" className="btn-primary justify-center" disabled={generating} onClick={onGenerate}>{generating ? <FileText size={17} className="animate-pulse" /> : <Download size={17} />} {generating ? 'Генериране...' : 'Генерирай CV (PDF)'}</button>
+    </div>
+  </div>
+}
+
+function CvSection({ title, action, children }: { title: string, action?: ReactNode, children: ReactNode }) {
+  return <section className="rounded border border-gray-200 bg-white p-4">
+    <div className="flex items-center justify-between gap-3 mb-3"><h3 className="font-semibold text-gray-900">{title}</h3>{action}</div>
+    {children}
+  </section>
+}
+
+function RepeatCard({ title, onRemove, children }: { title: string, onRemove: () => void, children: ReactNode }) {
+  return <div className="rounded border border-gray-200 bg-gray-50 p-4">
+    <div className="flex items-center justify-between gap-3 mb-3"><span className="text-sm font-semibold text-gray-800">{title}</span><button type="button" className="text-red-700 hover:text-red-900 inline-flex items-center gap-1 text-sm" onClick={onRemove}><Trash2 size={15} /> Премахни</button></div>
+    {children}
+  </div>
+}
+
+function AddButton({ label, onClick }: { label: string, onClick: () => void }) {
+  return <button type="button" className="btn-default" onClick={onClick}><Plus size={15} /> {label}</button>
+}
+
+function EmptyState({ text }: { text: string }) {
+  return <p className="text-sm text-gray-500 rounded border border-dashed border-gray-300 p-4">{text} Използвайте бутона „Добави“.</p>
 }
 
 function Field({ label, value, onChange, type = 'text' }: { label: string, value?: string, onChange: (value: string) => void, type?: string }) {

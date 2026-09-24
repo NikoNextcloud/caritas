@@ -2,20 +2,9 @@
 
 import Docxtemplater from 'docxtemplater'
 import PizZip from 'pizzip'
-import {
-  AlignmentType,
-  BorderStyle,
-  Document,
-  HeadingLevel,
-  Packer,
-  Paragraph,
-  Table,
-  TableCell,
-  TableRow,
-  TextRun,
-  WidthType,
-} from 'docx'
-import type { Beneficiary, BeneficiaryDocumentProfile, FamilyMember } from '@/types'
+import fontkit from '@pdf-lib/fontkit'
+import { PDFDocument, PDFFont, PDFPage, rgb } from 'pdf-lib'
+import type { Beneficiary, BeneficiaryDocumentProfile, CvEducationEntry, CvExperience, CvReference, FamilyMember } from '@/types'
 
 export type BeneficiaryDocumentKind = 'career-card' | 'humanitarian-card' | 'individual-plan' | 'cv'
 
@@ -174,93 +163,284 @@ async function renderTemplate(kind: Exclude<BeneficiaryDocumentKind, 'cv'>, bene
   return template.getZip().generate({ type: 'blob', mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' })
 }
 
-function sectionTitle(text: string) {
-  return new Paragraph({
-    heading: HeadingLevel.HEADING_2,
-    spacing: { before: 260, after: 100 },
-    children: [new TextRun({ text, bold: true, color: '000000', size: 24 })],
-  })
+type CvFonts = { regular: PDFFont, bold: PDFFont }
+type CvFlow = { doc: PDFDocument, page: PDFPage, fonts: CvFonts, x: number, width: number, y: number, name: string }
+
+const PAGE_WIDTH = 595.28
+const PAGE_HEIGHT = 841.89
+const INK = rgb(0.22, 0.22, 0.22)
+const MUTED = rgb(0.43, 0.43, 0.43)
+const RULE = rgb(0.72, 0.72, 0.72)
+const HEADER = rgb(0.96, 0.96, 0.96)
+
+function listItems(value?: string) {
+  return (value || '').split(/\r?\n|[,;]+/).map(item => item.replace(/^[-•]\s*/, '').trim()).filter(Boolean)
 }
 
-function contentParagraph(text: string) {
-  return new Paragraph({
-    spacing: { after: 100, line: 280 },
-    children: [new TextRun({ text, size: 22, color: '222222' })],
-  })
+function splitLines(font: PDFFont, text: string, size: number, maxWidth: number) {
+  const result: string[] = []
+  for (const paragraph of String(text || '').split(/\r?\n/)) {
+    if (!paragraph.trim()) { result.push(''); continue }
+    const words = paragraph.trim().split(/\s+/)
+    let line = ''
+    for (const word of words) {
+      const candidate = line ? `${line} ${word}` : word
+      if (font.widthOfTextAtSize(candidate, size) <= maxWidth) { line = candidate; continue }
+      if (line) result.push(line)
+      if (font.widthOfTextAtSize(word, size) <= maxWidth) { line = word; continue }
+      let part = ''
+      for (const character of word) {
+        if (font.widthOfTextAtSize(part + character, size) > maxWidth && part) { result.push(part); part = character } else part += character
+      }
+      line = part
+    }
+    if (line) result.push(line)
+  }
+  return result
 }
 
-function labeledParagraph(label: string, value: string) {
-  return new Paragraph({
-    spacing: { after: 80 },
-    children: [
-      new TextRun({ text: `${label}: `, bold: true, size: 22, color: '222222' }),
-      new TextRun({ text: value, size: 22, color: '222222' }),
-    ],
-  })
+function drawLines(page: PDFPage, lines: string[], font: PDFFont, size: number, x: number, y: number, lineHeight: number, color = MUTED, prefix = '') {
+  let cursor = y
+  for (const line of lines) {
+    page.drawText(`${prefix}${line}`, { x, y: cursor, size, font, color })
+    cursor -= lineHeight
+  }
+  return cursor
 }
 
-async function createCv(beneficiary: Beneficiary) {
+function sectionHeading(page: PDFPage, title: string, fonts: CvFonts, x: number, y: number) {
+  page.drawText(title.toLocaleUpperCase('bg-BG'), { x, y, size: 13, font: fonts.bold, color: INK })
+  return y - 24
+}
+
+function addContinuationPage(flow: CvFlow) {
+  const page = flow.doc.addPage([PAGE_WIDTH, PAGE_HEIGHT])
+  page.drawRectangle({ x: 0, y: PAGE_HEIGHT - 72, width: PAGE_WIDTH, height: 72, color: HEADER })
+  page.drawText(flow.name, { x: 44, y: PAGE_HEIGHT - 45, size: 18, font: flow.fonts.bold, color: INK })
+  page.drawLine({ start: { x: 44, y: PAGE_HEIGHT - 75 }, end: { x: PAGE_WIDTH - 44, y: PAGE_HEIGHT - 75 }, thickness: 0.7, color: RULE })
+  flow.page = page
+  flow.x = 44
+  flow.width = PAGE_WIDTH - 88
+  flow.y = PAGE_HEIGHT - 105
+}
+
+function ensureSpace(flow: CvFlow, height: number) {
+  if (flow.y - height < 45) addContinuationPage(flow)
+}
+
+function flowHeading(flow: CvFlow, title: string) {
+  ensureSpace(flow, 40)
+  flow.y = sectionHeading(flow.page, title, flow.fonts, flow.x, flow.y)
+}
+
+function flowText(flow: CvFlow, text: string, options: { size?: number, bold?: boolean, color?: ReturnType<typeof rgb>, gap?: number } = {}) {
+  const size = options.size || 9.5
+  const font = options.bold ? flow.fonts.bold : flow.fonts.regular
+  const lineHeight = size + 4
+  const lines = splitLines(font, text, size, flow.width)
+  for (const line of lines) {
+    ensureSpace(flow, lineHeight + 4)
+    flow.page.drawText(line, { x: flow.x, y: flow.y, size, font, color: options.color || MUTED })
+    flow.y -= lineHeight
+  }
+  flow.y -= options.gap ?? 8
+}
+
+function flowBullets(flow: CvFlow, value: string) {
+  const items = listItems(value)
+  for (const item of items) {
+    const lines = splitLines(flow.fonts.regular, item, 9.2, flow.width - 14)
+    for (let index = 0; index < lines.length; index++) {
+      ensureSpace(flow, 14)
+      flow.page.drawText(index === 0 ? '•' : '', { x: flow.x, y: flow.y, size: 9, font: flow.fonts.bold, color: MUTED })
+      flow.page.drawText(lines[index], { x: flow.x + 12, y: flow.y, size: 9.2, font: flow.fonts.regular, color: MUTED })
+      flow.y -= 13
+    }
+  }
+  flow.y -= 8
+}
+
+function hasValues(entry: object) {
+  return Object.values(entry as Record<string, string | undefined>).some(value => value?.trim())
+}
+
+function cvExperiences(profile: BeneficiaryDocumentProfile, beneficiary: Beneficiary) {
+  const saved = (profile.cvExperiences || []).filter(entry => hasValues(entry))
+  if (profile.cvExperiences !== undefined) return saved
+  const legacy = fallback(profile.cvWorkExperience, beneficiary.workExperience || beneficiary.experience || '')
+  return legacy ? [{ description: legacy } satisfies CvExperience] : []
+}
+
+function cvEducation(profile: BeneficiaryDocumentProfile, beneficiary: Beneficiary) {
+  const saved = (profile.cvEducationEntries || []).filter(entry => hasValues(entry))
+  if (profile.cvEducationEntries !== undefined) return saved
+  const legacy = fallback(profile.cvEducation, beneficiary.education || '')
+  return legacy ? [{ qualification: legacy } satisfies CvEducationEntry] : []
+}
+
+function dateRange(start?: string, end?: string) {
+  return [start, end].filter(Boolean).join(' - ')
+}
+
+async function circularPhoto(photoUrl?: string) {
+  if (!photoUrl) return null
+  try {
+    const response = await fetch(photoUrl)
+    if (!response.ok) return null
+    const bitmap = await createImageBitmap(await response.blob())
+    const canvas = document.createElement('canvas')
+    canvas.width = 320
+    canvas.height = 320
+    const context = canvas.getContext('2d')
+    if (!context) return null
+    const scale = Math.max(320 / bitmap.width, 320 / bitmap.height)
+    const width = bitmap.width * scale
+    const height = bitmap.height * scale
+    context.beginPath()
+    context.arc(160, 160, 160, 0, Math.PI * 2)
+    context.clip()
+    context.drawImage(bitmap, (320 - width) / 2, (320 - height) / 2, width, height)
+    const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/png'))
+    return blob ? new Uint8Array(await blob.arrayBuffer()) : null
+  } catch {
+    return null
+  }
+}
+
+function drawCompactSection(page: PDFPage, title: string, texts: string[], fonts: CvFonts, x: number, width: number, y: number) {
+  if (!texts.length) return y
+  let cursor = sectionHeading(page, title, fonts, x, y)
+  for (const text of texts) {
+    const lines = splitLines(fonts.regular, text, 8.7, width - 10)
+    for (let index = 0; index < lines.length; index++) {
+      page.drawText(index === 0 ? '•' : '', { x, y: cursor, size: 8.7, font: fonts.bold, color: MUTED })
+      page.drawText(lines[index], { x: x + 10, y: cursor, size: 8.7, font: fonts.regular, color: MUTED })
+      cursor -= 12
+    }
+  }
+  return cursor - 22
+}
+
+export async function createCv(beneficiary: Beneficiary) {
   const profile = beneficiary.documentProfile || {}
-  const name = fullName(beneficiary)
-  const children: (Paragraph | Table)[] = [
-    new Paragraph({
-      alignment: AlignmentType.CENTER,
-      spacing: { after: 80 },
-      children: [new TextRun({ text: name, bold: true, size: 34, color: '000000' })],
-    }),
-  ]
-  if (profile.cvProfessionalTitle || profile.cvDesiredPosition) {
-    children.push(new Paragraph({
-      alignment: AlignmentType.CENTER,
-      spacing: { after: 220 },
-      children: [new TextRun({ text: profile.cvProfessionalTitle || profile.cvDesiredPosition || '', size: 24, color: '666666' })],
-    }))
+  const name = fallback(profile.cvName, fullName(beneficiary))
+  const professionalTitle = fallback(profile.cvProfessionalTitle, profile.cvDesiredPosition || profile.careerDesiredWork || '')
+  const phone = profile.cvPhone ?? beneficiary.phone ?? ''
+  const email = profile.cvEmail ?? beneficiary.email ?? ''
+  const address = profile.cvAddress ?? beneficiary.currentAddress ?? beneficiary.address ?? beneficiary.city ?? ''
+
+  const doc = await PDFDocument.create()
+  doc.registerFontkit(fontkit)
+  const [regularBytes, boldBytes] = await Promise.all([
+    fetch('/fonts/DejaVuSans.ttf').then(response => response.arrayBuffer()),
+    fetch('/fonts/DejaVuSans-Bold.ttf').then(response => response.arrayBuffer()),
+  ])
+  const fonts: CvFonts = {
+    regular: await doc.embedFont(regularBytes, { subset: true }),
+    bold: await doc.embedFont(boldBytes, { subset: true }),
+  }
+  const page = doc.addPage([PAGE_WIDTH, PAGE_HEIGHT])
+  page.drawRectangle({ x: 0, y: PAGE_HEIGHT - 175, width: PAGE_WIDTH, height: 175, color: HEADER })
+  page.drawLine({ start: { x: 0, y: PAGE_HEIGHT - 175 }, end: { x: PAGE_WIDTH, y: PAGE_HEIGHT - 175 }, thickness: 0.7, color: RULE })
+  page.drawLine({ start: { x: 228, y: 0 }, end: { x: 228, y: PAGE_HEIGHT - 175 }, thickness: 0.6, color: RULE })
+
+  const photo = await circularPhoto(beneficiary.photoUrl)
+  if (photo) {
+    const image = await doc.embedPng(photo)
+    page.drawImage(image, { x: 52, y: PAGE_HEIGHT - 150, width: 110, height: 110 })
+  } else {
+    page.drawCircle({ x: 107, y: PAGE_HEIGHT - 95, size: 55, color: rgb(0.86, 0.86, 0.86) })
+    const initials = name.split(/\s+/).filter(Boolean).slice(0, 2).map(part => part[0]).join('').toLocaleUpperCase('bg-BG')
+    const initialsWidth = fonts.bold.widthOfTextAtSize(initials, 23)
+    page.drawText(initials, { x: 107 - initialsWidth / 2, y: PAGE_HEIGHT - 103, size: 23, font: fonts.bold, color: INK })
   }
 
-  const contactRows = [
-    ['Телефон', beneficiary.phone || ''], ['Имейл', beneficiary.email || ''],
-    ['Град', beneficiary.city || ''], ['Адрес', beneficiary.currentAddress || beneficiary.address || ''],
-  ].filter(([, value]) => value)
-  if (contactRows.length) {
-    children.push(new Table({
-      width: { size: 100, type: WidthType.PERCENTAGE },
-      rows: contactRows.map(([label, value]) => new TableRow({ children: [
-        new TableCell({ width: { size: 25, type: WidthType.PERCENTAGE }, borders: cvBorders(), children: [labeledParagraph(label, '')] }),
-        new TableCell({ width: { size: 75, type: WidthType.PERCENTAGE }, borders: cvBorders(), children: [contentParagraph(value)] }),
-      ] })),
-    }))
+  const nameLines = splitLines(fonts.bold, name, 27, 335)
+  let headerY = PAGE_HEIGHT - 78
+  for (const line of nameLines.slice(0, 2)) {
+    page.drawText(line, { x: 228, y: headerY, size: 27, font: fonts.bold, color: INK })
+    headerY -= 31
+  }
+  if (professionalTitle) {
+    for (const line of splitLines(fonts.regular, professionalTitle, 13.5, 325).slice(0, 2)) {
+      page.drawText(line, { x: 230, y: headerY - 2, size: 13.5, font: fonts.regular, color: MUTED })
+      headerY -= 17
+    }
   }
 
-  const sections: Array<[string, string]> = [
-    ['Професионален профил', profile.cvSummary || ''],
-    ['Желана позиция', profile.cvDesiredPosition || profile.careerDesiredWork || ''],
-    ['Трудов опит', profile.cvWorkExperience || beneficiary.workExperience || beneficiary.experience || ''],
-    ['Образование и квалификация', profile.cvEducation || beneficiary.education || ''],
-    ['Умения', profile.cvSkills || profile.skills || profile.skillsAndInterests || ''],
-    ['Езици', profile.cvLanguages || profile.otherLanguages || profile.careerOtherLanguages || ''],
-    ['Курсове и обучения', profile.cvCourses || ''],
-    ['Допълнителна информация', profile.cvAdditionalInfo || ''],
-  ]
-  for (const [title, value] of sections) {
-    if (!value.trim()) continue
-    children.push(sectionTitle(title), contentParagraph(value))
+  let leftY = PAGE_HEIGHT - 215
+  leftY = sectionHeading(page, 'Контакти:', fonts, 36, leftY)
+  const contacts = [phone, email, address].filter(Boolean)
+  for (const contact of contacts) {
+    const lines = splitLines(fonts.regular, contact, 8.8, 160)
+    leftY = drawLines(page, lines, fonts.regular, 8.8, 46, leftY, 12, MUTED)
+    leftY -= 3
+  }
+  leftY -= 16
+  const skills = listItems(profile.cvSkills || profile.skills || profile.skillsAndInterests)
+  leftY = drawCompactSection(page, 'Умения:', skills, fonts, 36, 175, leftY)
+
+  const education = cvEducation(profile, beneficiary)
+  if (education.length) {
+    leftY = sectionHeading(page, 'Образование:', fonts, 36, leftY)
+    for (const entry of education) {
+      const title = entry.institution || entry.qualification || ''
+      const qualification = entry.institution ? entry.qualification || '' : ''
+      if (title) leftY = drawLines(page, splitLines(fonts.bold, title, 8.4, 175), fonts.bold, 8.4, 36, leftY, 11, INK)
+      const dates = dateRange(entry.startDate, entry.endDate)
+      if (dates) leftY = drawLines(page, [dates], fonts.bold, 8.2, 36, leftY, 11, INK)
+      if (qualification) leftY = drawLines(page, splitLines(fonts.regular, qualification, 8.3, 175), fonts.regular, 8.3, 36, leftY, 11, MUTED)
+      leftY -= 12
+    }
+    leftY -= 8
+  }
+  const languages = listItems(profile.cvLanguages || profile.otherLanguages || profile.careerOtherLanguages)
+  if (languages.length && leftY > 70) drawCompactSection(page, 'Езици:', languages, fonts, 36, 175, leftY)
+
+  const flow: CvFlow = { doc, page, fonts, x: 260, width: 300, y: PAGE_HEIGHT - 215, name }
+  if (profile.cvSummary?.trim()) {
+    flowHeading(flow, 'За мен:')
+    flowText(flow, profile.cvSummary, { size: 9.4, gap: 16 })
   }
 
-  const cv = new Document({
-    styles: {
-      default: { document: { run: { font: 'Arial', size: 22 }, paragraph: { spacing: { line: 280 } } } },
-    },
-    sections: [{
-      properties: { page: { margin: { top: 900, right: 900, bottom: 900, left: 900 } } },
-      children,
-    }],
-  })
-  return Packer.toBlob(cv)
-}
+  const experiences = cvExperiences(profile, beneficiary)
+  if (experiences.length) {
+    flowHeading(flow, 'Опит:')
+    for (const entry of experiences) {
+      const heading = [entry.position, dateRange(entry.startDate, entry.endDate)].filter(Boolean).join(' | ')
+      if (heading) flowText(flow, heading, { size: 9.2, bold: true, color: INK, gap: 2 })
+      if (entry.company) flowText(flow, entry.company, { size: 9, bold: true, gap: 4 })
+      if (entry.description) flowBullets(flow, entry.description)
+      flow.y -= 5
+    }
+  }
 
-function cvBorders() {
-  const edge = { style: BorderStyle.SINGLE, size: 1, color: 'D9D9D9' }
-  return { top: edge, bottom: edge, left: edge, right: edge }
+  if (profile.cvCourses?.trim()) {
+    flowHeading(flow, 'Курсове и обучения:')
+    flowBullets(flow, profile.cvCourses)
+  }
+  if (profile.cvAdditionalInfo?.trim()) {
+    flowHeading(flow, 'Допълнителна информация:')
+    flowText(flow, profile.cvAdditionalInfo)
+  }
+
+  const references = (profile.cvReferences || []).filter(entry => hasValues(entry))
+  if (references.length) {
+    flowHeading(flow, 'Връзки:')
+    for (const entry of references) {
+      if (entry.name) flowText(flow, entry.name, { size: 9.2, bold: true, color: INK, gap: 1 })
+      if (entry.organization) flowText(flow, entry.organization, { size: 8.7, bold: true, gap: 2 })
+      if (entry.phone) flowText(flow, `Телефон: ${entry.phone}`, { size: 8.4, gap: 1 })
+      if (entry.email) flowText(flow, `Имейл: ${entry.email}`, { size: 8.4, gap: 8 })
+    }
+  }
+
+  doc.setTitle(`CV - ${name}`)
+  doc.setAuthor('Caritas Admin')
+  doc.setCreator('Caritas Admin')
+  const bytes = await doc.save()
+  const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer
+  return new Blob([buffer], { type: 'application/pdf' })
 }
 
 export async function downloadBeneficiaryDocument(kind: BeneficiaryDocumentKind, beneficiary: Beneficiary) {
@@ -271,5 +451,6 @@ export async function downloadBeneficiaryDocument(kind: BeneficiaryDocumentKind,
     cv: 'Автобиография',
   }
   const blob = kind === 'cv' ? await createCv(beneficiary) : await renderTemplate(kind, beneficiary)
-  downloadBlob(blob, `${labels[kind]}-${safeFilePart(fullName(beneficiary))}.docx`)
+  const extension = kind === 'cv' ? 'pdf' : 'docx'
+  downloadBlob(blob, `${labels[kind]}-${safeFilePart(fullName(beneficiary))}.${extension}`)
 }

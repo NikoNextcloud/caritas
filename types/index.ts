@@ -67,6 +67,28 @@ export interface FamilyMember {
   relation?: string
 }
 
+export interface CvExperience {
+  position?: string
+  company?: string
+  startDate?: string
+  endDate?: string
+  description?: string
+}
+
+export interface CvEducationEntry {
+  institution?: string
+  startDate?: string
+  endDate?: string
+  qualification?: string
+}
+
+export interface CvReference {
+  name?: string
+  organization?: string
+  phone?: string
+  email?: string
+}
+
 export interface BeneficiaryDocumentProfile {
   registrationDate?: string
   interviewer?: string
@@ -133,6 +155,10 @@ export interface BeneficiaryDocumentProfile {
   planDeadline?: string
 
   cvProfessionalTitle?: string
+  cvName?: string
+  cvPhone?: string
+  cvEmail?: string
+  cvAddress?: string
   cvSummary?: string
   cvDesiredPosition?: string
   cvSkills?: string
@@ -141,6 +167,9 @@ export interface BeneficiaryDocumentProfile {
   cvWorkExperience?: string
   cvCourses?: string
   cvAdditionalInfo?: string
+  cvExperiences?: CvExperience[]
+  cvEducationEntries?: CvEducationEntry[]
+  cvReferences?: CvReference[]
 }
 
 // ---- ЗАЯВКА ЗА ДЕЙНОСТ ----
