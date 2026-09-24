@@ -119,7 +119,8 @@ service cloud.firestore {
           'entityType', 'entityId', 'description', 'path',
           'changedFields', 'createdAt'
         ]);
-      allow update, delete: if admin();
+      allow update: if false;
+      allow delete: if admin();
     }
   }
 }

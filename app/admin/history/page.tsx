@@ -2,10 +2,8 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
-import { collection, getDocs, writeBatch } from 'firebase/firestore'
 import AdminLayout from '@/components/layout/AdminLayout'
-import { db } from '@/lib/firebase'
-import { getAuditLogs } from '@/lib/db'
+import { clearAuditHistory, getAuditLogs } from '@/lib/db'
 import type { AuditAction, AuditLog, UserRole } from '@/types'
 import { Eye, History, LogIn, PencilLine, RefreshCcw, Search, ShieldCheck, Trash2 } from 'lucide-react'
 import toast, { Toaster } from 'react-hot-toast'
@@ -40,6 +38,7 @@ const ENTITY_LABELS: Record<string, string> = {
   donor: 'Дарител',
   user: 'Потребител',
   import: 'Импорт',
+  auditHistory: 'История',
 }
 
 export default function HistoryPage() {
@@ -68,14 +67,12 @@ export default function HistoryPage() {
 
     setClearing(true)
     try {
-      const snapshot = await getDocs(collection(db, 'auditLogs'))
-      for (let offset = 0; offset < snapshot.docs.length; offset += 400) {
-        const batch = writeBatch(db)
-        snapshot.docs.slice(offset, offset + 400).forEach(item => batch.delete(item.ref))
-        await batch.commit()
-      }
-      setLogs([])
-      toast.success('Историята е изтрита')
+      const deleted = await clearAuditHistory()
+      setSearch('')
+      setActor('')
+      setAction('')
+      await load()
+      toast.success(`Изтрити са ${deleted} събития. Действието е записано в новата история.`)
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Историята не може да бъде изтрита')
     } finally {
@@ -119,7 +116,7 @@ export default function HistoryPage() {
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           <button className="btn-default" onClick={() => void load()} disabled={loading || clearing}><RefreshCcw size={16} className={loading ? 'animate-spin' : ''} /> Обнови</button>
-          <button className="btn-default text-red-600 border-red-200 hover:bg-red-50" onClick={() => void clearHistory()} disabled={loading || clearing}><Trash2 size={16} /> {clearing ? 'Изтриване...' : 'Изтрий историята'}</button>
+          <button className="btn-default text-red-600 border-red-200 hover:bg-red-50 disabled:opacity-50" onClick={() => void clearHistory()} disabled={loading || clearing || logs.length === 0}><Trash2 size={16} /> {clearing ? 'Изтриване...' : 'Изтрий историята'}</button>
         </div>
       </div>
       <div className="box-body">

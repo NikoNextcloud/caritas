@@ -135,6 +135,28 @@ export async function getAuditLogs(resultLimit = 500) {
   return snap.docs.map(item => ({ id: item.id, ...item.data() } as AuditLog))
 }
 
+export async function clearAuditHistory() {
+  const access = await currentAccess()
+  if (!access.isAdmin) throw new Error('Само администратор може да изтрива историята')
+
+  const snapshot = await getDocs(auditLogsCol)
+  if (snapshot.empty) return 0
+
+  for (let offset = 0; offset < snapshot.docs.length; offset += 400) {
+    const batch = writeBatch(db)
+    snapshot.docs.slice(offset, offset + 400).forEach(item => batch.delete(item.ref))
+    await batch.commit()
+  }
+
+  await addAuditLog({
+    action: 'delete',
+    entityType: 'auditHistory',
+    description: `Изтрита е историята с ${snapshot.size} събития`,
+    path: '/admin/history',
+  })
+  return snapshot.size
+}
+
 export interface CursorPage<T> {
   data: T[]
   total: number
