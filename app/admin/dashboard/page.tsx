@@ -50,11 +50,8 @@ export default function DashboardPage() {
 
   return (
     <AdminLayout>
-      {/* Breadcrumb */}
       <div className="flex items-center gap-2 text-sm text-gray-500 mb-4">
-        <span>Начало</span>
-        <span>/</span>
-        <span className="text-gray-800 font-medium">Основно табло</span>
+        <span>Начало</span><span>/</span><span className="text-gray-800 font-medium">Основно табло</span>
       </div>
 
       <h1 className="text-2xl font-semibold text-gray-700 mb-6">Основно табло</h1>
@@ -69,35 +66,32 @@ export default function DashboardPage() {
         <div className="box p-5 text-sm text-red-700 bg-red-50 border-red-200">{error}</div>
       ) : stats && (
         <>
-          {/* Stats Grid */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-            <StatCard label="Всички заявки"    value={stats.totalRequests}      icon={FileText}   color="var(--brand-primary)" href="/admin/requests" />
-            <StatCard label="Потвърдени"        value={stats.confirmedRequests}  icon={CheckCircle} color="#00a65a" href="/admin/requests?status=Потвърдено" />
-            <StatCard label="Чакащи"            value={stats.pendingRequests}    icon={Clock}       color="#f39c12" href="/admin/requests?status=Чакащ" />
-            <StatCard label="Отхвърлени"        value={stats.rejectedRequests}   icon={XCircle}     color="#dd4b39" href="/admin/requests?status=Отхвърлено" />
+            <StatCard label="Всички заявки" value={stats.totalRequests} icon={FileText} color="var(--brand-primary)" href="/admin/requests" />
+            <StatCard label="Потвърдени" value={stats.confirmedRequests} icon={CheckCircle} color="#00a65a" href="/admin/requests?status=Потвърдено" />
+            <StatCard label="Чакащи" value={stats.pendingRequests} icon={Clock} color="#f39c12" href="/admin/requests?status=Чакащ" />
+            <StatCard label="Отхвърлени" value={stats.rejectedRequests} icon={XCircle} color="#dd4b39" href="/admin/requests?status=Отхвърлено" />
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
-            <StatCard label="Бенефициенти"     value={stats.totalBeneficiaries} icon={Users}       color="var(--brand-primary)" href="/admin/beneficiaries" />
-            <StatCard label="Задачи"            value={stats.totalTasks}         icon={CheckSquare} color="#00c0ef" href="/admin/tasks" />
-            <StatCard label="Работодатели"      value={stats.totalEmployers}     icon={Briefcase}   color="#605ca8" href="/admin/employers" />
-            <StatCard label="Доброволци"        value={stats.totalVolunteers}    icon={HeartHandshake} color="#00a65a" href="/admin/volunteers" />
-            <StatCard label="Дарители"          value={stats.totalDonors}        icon={HandHeart}    color="#dd4b39" href="/admin/donors" />
+            <StatCard label="Бенефициенти" value={stats.totalBeneficiaries} icon={Users} color="var(--brand-primary)" href="/admin/beneficiaries" />
+            <StatCard label="Задачи" value={stats.totalTasks} icon={CheckSquare} color="#00c0ef" href="/admin/tasks" />
+            <StatCard label="Работодатели" value={stats.totalEmployers} icon={Briefcase} color="#605ca8" href="/admin/employers" />
+            <StatCard label="Доброволци" value={stats.totalVolunteers} icon={HeartHandshake} color="#00a65a" href="/admin/volunteers" />
+            <StatCard label="Дарители" value={stats.totalDonors} icon={HandHeart} color="#dd4b39" href="/admin/donors" />
           </div>
 
-          {/* Quick links */}
           <div className="box">
-            <div className="box-header">
-              <span className="box-title">Бързи действия</span>
-            </div>
+            <div className="box-header"><span className="box-title">Бързи действия</span></div>
             <div className="box-body flex flex-wrap gap-3">
-              <Link href="/admin/requests?add=1"     className="btn-primary">+ Нова заявка</Link>
+              <Link href="/admin/requests?add=1" className="btn-primary">+ Нова заявка</Link>
               <Link href="/admin/beneficiaries?add=1" className="btn-success">+ Нов бенефициент</Link>
-              <Link href="/admin/tasks?add=1"         className="btn-warning">+ Нова задача</Link>
-              <Link href="/admin/employers?add=1"     className="btn-default">+ Нов работодател</Link>
-              <Link href="/admin/volunteers?add=1"    className="btn-default">+ Нов доброволец</Link>
-              <Link href="/admin/donors?add=1"        className="btn-default">+ Нов дарител</Link>
-              <Link href="/admin/export"              className="btn-default">↓ Експорт</Link>
+              <Link href="/admin/tasks?add=1" className="btn-warning">+ Нова задача</Link>
+              <Link href="/admin/employers?add=1" className="btn-default">+ Нов работодател</Link>
+              <Link href="/admin/volunteers?add=1" className="btn-default">+ Нов доброволец</Link>
+              <Link href="/admin/donors?add=1" className="btn-default">+ Нов дарител</Link>
+              <Link href="/admin/export" className="btn-default">↓ Експорт</Link>
+              <Link href="/admin/firebase" className="btn-default">☁ Firebase – план и хранилище</Link>
             </div>
           </div>
         </>
