@@ -1,4 +1,5 @@
 import { auth } from './firebase'
+import { migrateLegacyPhoto, removeBeneficiaryPhoto, removeBeneficiaryPhotos, resolveBeneficiaryPhotoUrls } from './beneficiary-photo-storage'
 import {
   countAppDocuments, deleteAppDocuments, getAppDocument, getAppDocuments,
   getAppDocumentsByIds, getAppUsage, updateAppDocument, upsertAppDocument, upsertAppDocuments,
@@ -107,13 +108,31 @@ export async function updateRequest(id: string, data: Partial<BeneficiaryRequest
 export async function deleteRequests(ids: string[]) { await deleteAppDocuments('beneficiaryRequests', ids); clearCache('beneficiaryRequests'); await auditChange('delete', 'beneficiaryRequest', ids.join(', '), `Изтрити са ${ids.length} заявки`) }
 export async function updateRequestStatus(id: string, status: RequestStatus) { await updateRequest(id, { status }); await addNotification({ type: 'status_change', title: 'Промяна на статус на заявка', message: `Заявка #${id} е променена на: ${status}`, isRead: false, relatedId: id, relatedType: 'beneficiaryRequest' }) }
 
-export async function getBeneficiaries(search?: string) { let data = await visibleCollection<Beneficiary>('beneficiaries'); data.sort((a, b) => (a.lastName || '').localeCompare(b.lastName || '', 'bg')); if (search) { const s = search.toLowerCase(); data = data.filter(b => b.firstName?.toLowerCase().includes(s) || b.lastName?.toLowerCase().includes(s) || b.email?.toLowerCase().includes(s) || b.phone?.includes(s)) } return data }
-export async function searchBeneficiaries(term: string, resultLimit = 100) { const value = term.trim().toLocaleLowerCase('bg'); if (!value) return []; return (await visibleCollection<Beneficiary>('beneficiaries')).filter(item => [item.id, item.firstName, item.lastName, item.middleName, item.email, item.egn, item.phone].some(field => String(field || '').toLocaleLowerCase('bg').includes(value))).slice(0, resultLimit) }
-export function getBeneficiariesPage(pageSize = 25, cursor: Cursor | null = null, sortKey: 'id' | 'firstName' | 'lastName' = 'lastName', direction: 'asc' | 'desc' = 'asc') { return cursorPage<Beneficiary>('beneficiaries', pageSize, cursor, sortKey === 'id' ? 'externalId' : sortKey, direction) }
-export function getBeneficiary(id: string) { return getAppDocument<Beneficiary>('beneficiaries', id) }
+export async function getBeneficiaries(search?: string) { let data = await visibleCollection<Beneficiary>('beneficiaries'); data.sort((a, b) => (a.lastName || '').localeCompare(b.lastName || '', 'bg')); if (search) { const s = search.toLowerCase(); data = data.filter(b => b.firstName?.toLowerCase().includes(s) || b.lastName?.toLowerCase().includes(s) || b.email?.toLowerCase().includes(s) || b.phone?.includes(s)) } return resolveBeneficiaryPhotoUrls(data) }
+export async function searchBeneficiaries(term: string, resultLimit = 100) { const value = term.trim().toLocaleLowerCase('bg'); if (!value) return []; const rows = (await visibleCollection<Beneficiary>('beneficiaries')).filter(item => [item.id, item.firstName, item.lastName, item.middleName, item.email, item.egn, item.phone].some(field => String(field || '').toLocaleLowerCase('bg').includes(value))).slice(0, resultLimit); return resolveBeneficiaryPhotoUrls(rows) }
+export async function getBeneficiariesPage(pageSize = 25, cursor: Cursor | null = null, sortKey: 'id' | 'firstName' | 'lastName' = 'lastName', direction: 'asc' | 'desc' = 'asc') { const result = await cursorPage<Beneficiary>('beneficiaries', pageSize, cursor, sortKey === 'id' ? 'externalId' : sortKey, direction); return { ...result, data: await resolveBeneficiaryPhotoUrls(result.data) } }
+export async function getBeneficiary(id: string) { const row = await getAppDocument<Beneficiary>('beneficiaries', id); return row ? (await resolveBeneficiaryPhotoUrls([row]))[0] : null }
 export async function addBeneficiary(data: Omit<Beneficiary, 'id' | 'createdAt' | 'updatedAt'>) { let id = ''; for (let attempt = 0; attempt < 20; attempt++) { const candidate = String(100000 + Math.floor(Math.random() * 900000)); if (!(await getAppDocument('beneficiaries', candidate))) { id = candidate; break } } if (!id) throw new Error('Не може да бъде създаден свободен цифров ID'); await upsertAppDocument('beneficiaries', id, { ...data, externalId: Number(data.externalId || id), ...await ownership(), createdAt: now(), updatedAt: now() }); clearCache('beneficiaries'); await auditChange('create', 'beneficiary', id, 'Създаден е нов бенефициент', Object.keys(data)); return id }
 export async function updateBeneficiary(id: string, data: Partial<Beneficiary>) { await updateAppDocument('beneficiaries', id, { ...withoutId(data), updatedAt: now() }); clearCache('beneficiaries'); await auditChange('update', 'beneficiary', id, 'Редактиран е бенефициент', Object.keys(data)) }
-export async function deleteBeneficiary(id: string) { await deleteAppDocuments('beneficiaries', [id]); clearCache('beneficiaries'); await auditChange('delete', 'beneficiary', id, 'Изтрит е бенефициент') }
+export async function deleteBeneficiary(id: string) { const current = await getAppDocument<Beneficiary>('beneficiaries', id); await deleteAppDocuments('beneficiaries', [id]); clearCache('beneficiaries'); if (current?.photoPath) { try { await removeBeneficiaryPhoto(current.photoPath) } catch (error) { console.error('Beneficiary photo could not be removed', error) } } await auditChange('delete', 'beneficiary', id, 'Изтрит е бенефициент') }
+
+export async function migrateLegacyBeneficiaryPhotos() {
+  if (!(await currentAccess()).isAdmin) return 0
+  const rows = await visibleCollection<Beneficiary>('beneficiaries')
+  const legacy = rows.filter(item => !item.photoPath && item.photoUrl?.startsWith('data:'))
+  let migrated = 0
+  for (const beneficiary of legacy) {
+    const result = await migrateLegacyPhoto(beneficiary)
+    if (!result) continue
+    await updateAppDocument('beneficiaries', beneficiary.id, { photoPath: result.path, photoUrl: '', updatedAt: now() })
+    migrated++
+  }
+  if (migrated) {
+    clearCache('beneficiaries')
+    await auditChange('update', 'beneficiaryPhoto', undefined, `Преместени са ${migrated} стари снимки в Supabase Storage`, ['photoPath'])
+  }
+  return migrated
+}
 
 export async function getTasks() { return (await visibleCollection<Task>('tasks')).sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || '')) }
 export async function addTask(data: Omit<Task, 'id' | 'createdAt' | 'updatedAt'>) { const id = newId(); await upsertAppDocument('tasks', id, { ...data, ...await ownership(), createdAt: now(), updatedAt: now() }); clearCache('tasks'); await auditChange('create', 'task', id, 'Създадена е задача', Object.keys(data)); return id }
@@ -153,7 +172,7 @@ export async function patchUser(uid: string, data: Partial<AdminUser>) { await u
 export async function deleteUsers(ids: string[]) { const count = await deleteAppDocuments('users', ids); clearCache('users'); return count }
 export async function replaceImportDocuments(items: Array<{ collectionName: 'beneficiaries' | 'beneficiaryRequests'; id: string; data: Record<string, unknown> }>) { await upsertAppDocuments(items.map(item => ({ collection_name: item.collectionName, id: item.id, data: item.data }))); clearCache('beneficiaries'); clearCache('beneficiaryRequests') }
 export async function getExistingImportIds(collectionName: 'beneficiaries' | 'beneficiaryRequests', ids: string[]) { return new Set((await getAppDocumentsByIds<Record<string, unknown>>(collectionName, ids)).map(item => item.id)) }
-export async function clearImportCollection(collectionName: 'beneficiaries' | 'beneficiaryRequests') { const count = await deleteAppDocuments(collectionName); clearCache(collectionName); return count }
+export async function clearImportCollection(collectionName: 'beneficiaries' | 'beneficiaryRequests') { if (collectionName === 'beneficiaries') { const rows = await getAppDocuments<Beneficiary>('beneficiaries'); await removeBeneficiaryPhotos(rows.map(item => item.photoPath).filter((path): path is string => Boolean(path))) } const count = await deleteAppDocuments(collectionName); clearCache(collectionName); return count }
 
 const CLEANABLE_COLLECTIONS = new Set([
   'beneficiaryRequests', 'beneficiaries', 'schedule', 'tasks', 'employers',
@@ -168,6 +187,10 @@ export async function getSupabaseUsage() {
 export async function clearUsageCollection(collectionName: string) {
   if (!(await currentAccess()).isAdmin) throw new Error('Само администратор може да изтрива данни')
   if (!CLEANABLE_COLLECTIONS.has(collectionName)) throw new Error('Тази категория е защитена от изтриване')
+  if (collectionName === 'beneficiaries') {
+    const rows = await getAppDocuments<Beneficiary>('beneficiaries')
+    await removeBeneficiaryPhotos(rows.map(item => item.photoPath).filter((path): path is string => Boolean(path)))
+  }
   const count = await deleteAppDocuments(collectionName)
   clearCache(collectionName)
   await auditChange('delete', collectionName, undefined, `Изтрити са всички ${count} записа от категория ${collectionName}`)

@@ -68,6 +68,7 @@ export interface Beneficiary extends OwnedRecord {
   numberOfKids?: string
   vulnerability?: string
   photoUrl?: string
+  photoPath?: string
   lastEdited?: string
   sourceData?: Record<string, string | number | boolean | null>
   notes?: string

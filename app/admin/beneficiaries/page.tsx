@@ -1,11 +1,12 @@
 'use client'
-import { ChangeEvent, useEffect, useMemo, useState } from 'react'
+import { ChangeEvent, useEffect, useMemo, useRef, useState } from 'react'
 import AdminLayout from '@/components/layout/AdminLayout'
 import DataTable from '@/components/ui/DataTable'
 import Modal from '@/components/ui/Modal'
 import UserAssignment from '@/components/ui/UserAssignment'
-import { getBeneficiariesPage, searchBeneficiaries, addBeneficiary, updateBeneficiary, deleteBeneficiary } from '@/lib/db'
-import { prepareBeneficiaryPhoto, validateBeneficiaryPhoto } from '@/lib/beneficiary-images'
+import { getBeneficiariesPage, searchBeneficiaries, addBeneficiary, updateBeneficiary, deleteBeneficiary, migrateLegacyBeneficiaryPhotos } from '@/lib/db'
+import { fileFromDataUrl, validateBeneficiaryPhoto } from '@/lib/beneficiary-images'
+import { uploadBeneficiaryPhoto } from '@/lib/beneficiary-photo-storage'
 import type { Beneficiary } from '@/types'
 import { ArrowDownAZ, ArrowUpAZ, FileText, ImageIcon, Plus, Search, Upload } from 'lucide-react'
 import Link from 'next/link'
@@ -53,6 +54,7 @@ export default function BeneficiariesPage() {
   const [nextCursor, setNextCursor] = useState<string | null>(null)
   const [cursors, setCursors] = useState<Array<string | null>>([null])
   const [searchMode, setSearchMode] = useState(false)
+  const photoMigrationStarted = useRef(false)
 
   async function load(cursor = cursors[page - 1] || null) {
     setLoading(true)
@@ -68,6 +70,14 @@ export default function BeneficiariesPage() {
   }
 
   useEffect(() => { void load() }, [page, sortKey, sortDirection])
+
+  useEffect(() => {
+    if (photoMigrationStarted.current) return
+    photoMigrationStarted.current = true
+    void migrateLegacyBeneficiaryPhotos()
+      .then(migrated => { if (migrated) void load() })
+      .catch(error => console.error('Legacy photos could not be migrated', error))
+  }, [])
 
   function resetPaging() {
     setSearchMode(false)
@@ -169,16 +179,29 @@ export default function BeneficiariesPage() {
     if (!editing.firstName || !editing.lastName) { toast.error('Попълнете имената'); return }
     setSaving(true)
     try {
-      const photoUrl = photoFile ? await prepareBeneficiaryPhoto(photoFile) : editing.photoUrl
-      const record = {
-        ...editing,
-        ...(!isNew ? { externalId: Number(numericBeneficiaryId(editing)) } : {}),
-        ...(photoUrl ? { photoUrl } : {}),
-      }
+      const { id: _id, createdAt: _createdAt, updatedAt: _updatedAt, photoUrl: displayedPhotoUrl, ...editable } = editing
+      let photoSource: File | Blob | null = photoFile
+      if (!photoSource && !editing.photoPath && displayedPhotoUrl?.startsWith('data:')) photoSource = await fileFromDataUrl(displayedPhotoUrl)
+
       if (isNew) {
-        await addBeneficiary(record as Omit<Beneficiary, 'id' | 'createdAt' | 'updatedAt'>)
+        const id = await addBeneficiary({ ...editable, photoUrl: '' } as Omit<Beneficiary, 'id' | 'createdAt' | 'updatedAt'>)
+        if (photoSource) {
+          try {
+            const uploaded = await uploadBeneficiaryPhoto(id, photoSource)
+            await updateBeneficiary(id, { photoPath: uploaded.path, photoUrl: '' })
+          } catch (error) {
+            await deleteBeneficiary(id)
+            throw error
+          }
+        }
       } else {
-        await updateBeneficiary(editing.id!, record)
+        let photoPath = editing.photoPath
+        if (photoSource) photoPath = (await uploadBeneficiaryPhoto(editing.id!, photoSource, editing.photoPath)).path
+        await updateBeneficiary(editing.id!, {
+          ...editable,
+          externalId: Number(numericBeneficiaryId(editing)),
+          ...(photoPath ? { photoPath, photoUrl: '' } : { photoUrl: displayedPhotoUrl || '' }),
+        })
       }
       closeEditor()
       resetPaging()
@@ -299,7 +322,7 @@ export default function BeneficiariesPage() {
                 </label>
                 <input id="beneficiary-photo" type="file" accept="image/*" className="sr-only"
                   onChange={handlePhotoChange} />
-                <p className="text-xs text-gray-500 mt-2">JPG, PNG или друго изображение до 10 MB. Снимката се оптимизира автоматично. Кликнете върху нея за голям преглед.</p>
+                <p className="text-xs text-gray-500 mt-2">До 10 MB. Автоматично се намалява до 800 px и около 80 KB, след което се пази защитено в Supabase Storage. Кликнете върху снимката за голям преглед.</p>
               </div>
             </div>
           </div>
