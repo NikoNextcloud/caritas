@@ -39,12 +39,25 @@ export async function getAppDocument<T extends object>(collectionName: string, i
 }
 
 export async function getAppDocuments<T extends object>(collectionName: string) {
-  const { data, error } = await supabase
-    .from('app_documents')
-    .select('id,data')
-    .eq('collection_name', collectionName)
-  fail(error)
-  return (data || []).map(row => ({ id: row.id, ...(row.data as T) } as T & { id: string }))
+  const rows: Array<T & { id: string }> = []
+  const pageSize = 1000
+
+  // Supabase returns at most 1000 rows per request by default. Fetch every
+  // page so updated records cannot disappear from client-side lists/search.
+  for (let offset = 0; ; offset += pageSize) {
+    const { data, error } = await supabase
+      .from('app_documents')
+      .select('id,data')
+      .eq('collection_name', collectionName)
+      .order('id', { ascending: true })
+      .range(offset, offset + pageSize - 1)
+    fail(error)
+
+    rows.push(...(data || []).map(row => ({ id: row.id, ...(row.data as T) } as T & { id: string })))
+    if (!data || data.length < pageSize) break
+  }
+
+  return rows
 }
 
 export async function getAppDocumentsByIds<T extends object>(collectionName: string, ids: string[]) {
