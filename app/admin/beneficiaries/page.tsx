@@ -181,17 +181,19 @@ export default function BeneficiariesPage() {
     try {
       const { id: _id, createdAt: _createdAt, updatedAt: _updatedAt, photoUrl: displayedPhotoUrl, ...editable } = editing
       let photoSource: File | Blob | null = photoFile
+      let savedId = editing.id || ''
+      let photoWarning = ''
       if (!photoSource && !editing.photoPath && displayedPhotoUrl?.startsWith('data:')) photoSource = await fileFromDataUrl(displayedPhotoUrl)
 
       if (isNew) {
-        const id = await addBeneficiary({ ...editable, photoUrl: '' } as Omit<Beneficiary, 'id' | 'createdAt' | 'updatedAt'>)
+        savedId = await addBeneficiary({ ...editable, photoUrl: '' } as Omit<Beneficiary, 'id' | 'createdAt' | 'updatedAt'>)
         if (photoSource) {
           try {
-            const uploaded = await uploadBeneficiaryPhoto(id, photoSource)
-            await updateBeneficiary(id, { photoPath: uploaded.path, photoUrl: '' })
+            const uploaded = await uploadBeneficiaryPhoto(savedId, photoSource)
+            await updateBeneficiary(savedId, { photoPath: uploaded.path, photoUrl: '' })
           } catch (error) {
-            await deleteBeneficiary(id)
-            throw error
+            console.error('Beneficiary was saved, but the photo upload failed', error)
+            photoWarning = 'Бенефициентът е записан, но снимката не беше качена. Може да я добавите отново чрез редакция.'
           }
         }
       } else {
@@ -204,8 +206,10 @@ export default function BeneficiariesPage() {
         })
       }
       closeEditor()
-      resetPaging()
-      toast.success(isNew ? 'Бенефициентът е добавен. Документите са готови за автоматично попълване.' : 'Бенефициентът е обновен!')
+      if (query.trim()) await runSearch()
+      else await load(cursors[page - 1] || null)
+      toast.success(isNew ? `Бенефициентът е добавен с ID ${savedId}. Документите са готови за автоматично попълване.` : 'Бенефициентът е обновен!')
+      if (photoWarning) toast.error(photoWarning, { duration: 7000 })
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Грешка при запис')
     }
