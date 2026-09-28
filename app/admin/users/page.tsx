@@ -2,13 +2,10 @@
 import { useEffect, useState } from 'react'
 import AdminLayout from '@/components/layout/AdminLayout'
 import Modal from '@/components/ui/Modal'
-import {
-  collection, getDocs, doc, setDoc, updateDoc, deleteDoc
-} from 'firebase/firestore'
 import { createUserWithEmailAndPassword, getAuth, signOut } from 'firebase/auth'
 import { deleteApp, initializeApp } from 'firebase/app'
-import { db, firebaseConfig } from '@/lib/firebase'
-import { addAuditLog, subscribeToOnlineUsers } from '@/lib/db'
+import { firebaseConfig } from '@/lib/firebase'
+import { addAuditLog, deleteUsers, getUsers, patchUser, saveUser, subscribeToOnlineUsers } from '@/lib/db'
 import type { AdminUser, UserRole } from '@/types'
 import { Plus, Shield } from 'lucide-react'
 import toast, { Toaster } from 'react-hot-toast'
@@ -46,12 +43,8 @@ export default function UsersPage() {
   async function load() {
     setLoading(true)
     try {
-      const snap = await getDocs(collection(db, 'users'))
-      setUsers(snap.docs.map(d => ({
-        id: d.id,
-        uid: d.id,
-        ...d.data()
-      } as AdminUserRow)))
+      const records = await getUsers()
+      setUsers(records.map(user => ({ ...user, id: user.uid } as AdminUserRow)))
     } catch { toast.error('Грешка при зареждане') }
     setLoading(false)
   }
@@ -77,7 +70,8 @@ export default function UsersPage() {
       const secondaryApp = initializeApp(firebaseConfig, `create-user-${Date.now()}`)
       const secondaryAuth = getAuth(secondaryApp)
       const cred = await createUserWithEmailAndPassword(secondaryAuth, form.email, form.password)
-      await setDoc(doc(db, 'users', cred.user.uid), {
+      await saveUser(cred.user.uid, {
+        uid: cred.user.uid,
         email: form.email,
         displayName: form.displayName,
         role: form.role,
@@ -102,7 +96,7 @@ export default function UsersPage() {
 
   async function handleRoleChange(uid: string, role: UserRole) {
     try {
-      await updateDoc(doc(db, 'users', uid), { role })
+      await patchUser(uid, { role })
       await addAuditLog({ action: 'role_change', entityType: 'user', entityId: uid, description: `Променена е ролята на потребител на „${roleLabel[role]}“`, changedFields: ['role'] }).catch(() => {})
       toast.success('Ролята е обновена')
       load()
@@ -113,7 +107,7 @@ export default function UsersPage() {
     if (selected.size === 0) return
     if (!confirm(`Изтриване на ${selected.size} потребители?`)) return
     try {
-      for (const id of Array.from(selected)) await deleteDoc(doc(db, 'users', id))
+      await deleteUsers(Array.from(selected))
       await addAuditLog({ action: 'delete', entityType: 'user', entityId: Array.from(selected).join(', '), description: `Изтрити са ${selected.size} потребители` }).catch(() => {})
       toast.success(`${selected.size} потребители изтрити`)
       setSelected(new Set())

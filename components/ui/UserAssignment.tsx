@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
-import { collection, doc, getDoc, getDocs } from 'firebase/firestore'
-import { auth, db } from '@/lib/firebase'
+import { auth } from '@/lib/firebase'
+import { getUser, getUsers } from '@/lib/db'
 
 interface UserOption {
   uid: string
@@ -22,18 +22,18 @@ export default function UserAssignment({ value = '', onChange }: Props) {
       await auth.authStateReady()
       if (!auth.currentUser) return
       try {
-        const snapshot = await getDocs(collection(db, 'users'))
-        setUsers(snapshot.docs.map(item => ({
-          uid: item.id,
-          displayName: item.data().displayName || item.data().email || 'Потребител',
-          email: item.data().email || '',
+        const records = await getUsers()
+        setUsers(records.map(item => ({
+          uid: item.uid,
+          displayName: item.displayName || item.email || 'Потребител',
+          email: item.email || '',
         })))
       } catch {
-        const own = await getDoc(doc(db, 'users', auth.currentUser.uid))
-        if (own.exists()) setUsers([{
-          uid: own.id,
-          displayName: own.data().displayName || own.data().email || 'Потребител',
-          email: own.data().email || '',
+        const own = await getUser(auth.currentUser.uid)
+        if (own) setUsers([{
+          uid: own.uid,
+          displayName: own.displayName || own.email || 'Потребител',
+          email: own.email || '',
         }])
       }
     }

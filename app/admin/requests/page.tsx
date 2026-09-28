@@ -10,7 +10,6 @@ import type { BeneficiaryRequest, RequestStatus, CaseEntry, SearchParams } from 
 import { Search, Plus, Download, RefreshCw } from 'lucide-react'
 import toast, { Toaster } from 'react-hot-toast'
 import { exportToCSV } from '@/lib/export'
-import type { DocumentData, DocumentSnapshot } from 'firebase/firestore'
 
 const STATUSES: RequestStatus[] = ['Потвърдено', 'Отхвърлено', 'Чакащ', 'Приключен']
 
@@ -56,8 +55,8 @@ export default function RequestsPage() {
   const [page, setPage] = useState(1)
   const [total, setTotal] = useState(0)
   const [hasNext, setHasNext] = useState(false)
-  const [nextCursor, setNextCursor] = useState<DocumentSnapshot<DocumentData> | null>(null)
-  const [cursors, setCursors] = useState<Array<DocumentSnapshot<DocumentData> | null>>([null])
+  const [nextCursor, setNextCursor] = useState<string | null>(null)
+  const [cursors, setCursors] = useState<Array<string | null>>([null])
   const [serverMode, setServerMode] = useState(true)
 
   const load = useCallback(async () => {
@@ -82,7 +81,7 @@ export default function RequestsPage() {
     } catch (err) {
       console.error('Load error:', err)
       setData([])
-      toast.error('Грешка при зареждане — проверете Firestore правилата или дневния лимит')
+      toast.error('Грешка при зареждане — проверете връзката със Supabase')
     }
     setLoading(false)
   }, [search, page, cursors])
@@ -134,7 +133,7 @@ export default function RequestsPage() {
       resetPaging()
     } catch (err) {
       console.error('Save error:', err)
-      toast.error('Грешка при запис — провери Firestore правилата')
+      toast.error('Грешка при запис — проверете връзката със Supabase')
     }
     setSaving(false)
   }

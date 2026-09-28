@@ -44,7 +44,7 @@ export default function DashboardPage() {
   useEffect(() => {
     getDashboardStats()
       .then(s => setStats(s))
-      .catch(() => setError('Данните не могат да бъдат заредени. Проверете Firebase лимита и опитайте отново.'))
+      .catch(() => setError('Данните не могат да бъдат заредени. Проверете връзката със Supabase и опитайте отново.'))
       .finally(() => setLoading(false))
   }, [])
 
@@ -91,7 +91,7 @@ export default function DashboardPage() {
               <Link href="/admin/volunteers?add=1" className="btn-default">+ Нов доброволец</Link>
               <Link href="/admin/donors?add=1" className="btn-default">+ Нов дарител</Link>
               <Link href="/admin/export" className="btn-default">↓ Експорт</Link>
-              <Link href="/admin/firebase" className="btn-default">☁ Firebase – план и хранилище</Link>
+              <Link href="/admin/firebase" className="btn-default">☁ Supabase – база и хранилище</Link>
             </div>
           </div>
         </>

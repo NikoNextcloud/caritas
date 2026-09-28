@@ -10,7 +10,6 @@ import type { Beneficiary } from '@/types'
 import { ArrowDownAZ, ArrowUpAZ, FileText, ImageIcon, Plus, Search, Upload } from 'lucide-react'
 import Link from 'next/link'
 import toast, { Toaster } from 'react-hot-toast'
-import type { DocumentData, DocumentSnapshot } from 'firebase/firestore'
 
 const EMPTY: Partial<Beneficiary> = {
   firstName: '', lastName: '', middleName: '', gender: '', birthDate: '', country: '', egn: '',
@@ -51,8 +50,8 @@ export default function BeneficiariesPage() {
   const [page, setPage] = useState(1)
   const [total, setTotal] = useState(0)
   const [hasNext, setHasNext] = useState(false)
-  const [nextCursor, setNextCursor] = useState<DocumentSnapshot<DocumentData> | null>(null)
-  const [cursors, setCursors] = useState<Array<DocumentSnapshot<DocumentData> | null>>([null])
+  const [nextCursor, setNextCursor] = useState<string | null>(null)
+  const [cursors, setCursors] = useState<Array<string | null>>([null])
   const [searchMode, setSearchMode] = useState(false)
 
   async function load(cursor = cursors[page - 1] || null) {

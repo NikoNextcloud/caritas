@@ -1,685 +1,159 @@
-import {
-  collection, doc, getDocs, getDoc, addDoc, setDoc, updateDoc, deleteDoc,
-  query, where, orderBy, limit, onSnapshot, writeBatch, startAfter, startAt, endAt,
-  getCountFromServer,
-  type DocumentSnapshot, type DocumentData, type QueryConstraint, type QuerySnapshot
-} from 'firebase/firestore'
-import { db } from './firebase'
 import { auth } from './firebase'
+import {
+  countAppDocuments, deleteAppDocuments, getAppDocument, getAppDocuments,
+  getAppDocumentsByIds, updateAppDocument, upsertAppDocument, upsertAppDocuments,
+} from './app-data'
 import type {
-  BeneficiaryRequest, Beneficiary, Task, Employer,
-  Notification, SearchParams, RequestStatus, Donor, Volunteer, AdminUser, ScheduleEntry,
-  AuditAction, AuditLog, UserRole
+  BeneficiaryRequest, Beneficiary, Task, Employer, Notification, SearchParams,
+  RequestStatus, Donor, Volunteer, AdminUser, ScheduleEntry, AuditAction, AuditLog, UserRole,
 } from '@/types'
 
 const now = () => new Date().toISOString()
-const COLLECTION_CACHE_MS = 60_000
-
+const CACHE_MS = 60_000
+type Cursor = string
 type Access = Awaited<ReturnType<typeof loadCurrentAccess>>
-type CachedCollection = { expiresAt: number; data: unknown[] }
-
 let accessCache: { uid: string; value: Access } | null = null
-const collectionCache = new Map<string, CachedCollection>()
-const collectionCountCache = new Map<string, { expiresAt: number; count: number }>()
-
-function toData<T>(snap: { exists: () => boolean; id: string; data: () => Record<string, unknown> | undefined }): T | null {
-  if (!snap.exists()) return null
-  return { id: snap.id, ...snap.data() } as T
-}
+const cache = new Map<string, { expiresAt: number; data: unknown[] }>()
 
 async function loadCurrentAccess() {
   await auth.authStateReady()
   const user = auth.currentUser
   if (!user) throw new Error('Необходим е вход в системата')
-  const profile = await getDoc(doc(db, 'users', user.uid))
-  const data = profile.exists() ? profile.data() as Partial<AdminUser> : {}
-  const role = (data.role || 'user') as UserRole
-  return {
-    uid: user.uid,
-    name: data.displayName || user.displayName || user.email || 'Потребител',
-    role,
-    isAdmin: role === 'admin',
-  }
+  const profile = await getAppDocument<Partial<AdminUser>>('users', user.uid)
+  const role = (profile?.role || 'user') as UserRole
+  return { uid: user.uid, name: profile?.displayName || user.displayName || user.email || 'Потребител', role, isAdmin: role === 'admin' }
 }
 
-async function currentAccess() {
+export async function currentAccess() {
   await auth.authStateReady()
   const uid = auth.currentUser?.uid
   if (!uid) throw new Error('Необходим е вход в системата')
   if (accessCache?.uid === uid) return accessCache.value
-  const value = await loadCurrentAccess()
-  accessCache = { uid, value }
-  return value
+  const value = await loadCurrentAccess(); accessCache = { uid, value }; return value
 }
 
-function clearCollectionCache(collectionName: string) {
-  for (const key of Array.from(collectionCache.keys())) {
-    if (key.endsWith(`:${collectionName}`)) collectionCache.delete(key)
-  }
-  collectionCountCache.delete(collectionName)
+function clearCache(collectionName: string) {
+  for (const key of Array.from(cache.keys())) if (key.endsWith(`:${collectionName}`)) cache.delete(key)
 }
-
-const sharedReadCollections = new Set([
-  'beneficiaries',
-  'employers',
-  'volunteers',
-  'donors',
-  'schedule',
-])
 
 async function visibleCollection<T>(collectionName: string): Promise<T[]> {
   const access = await currentAccess()
-  const cacheKey = `${access.uid}:${collectionName}`
-  const cached = collectionCache.get(cacheKey)
-  if (cached && cached.expiresAt > Date.now()) return cached.data as T[]
-
-  const ref = collection(db, collectionName)
-  if (access.isAdmin || sharedReadCollections.has(collectionName)) {
-    const snap = await getDocs(ref)
-    const data = snap.docs.map(d => ({ id: d.id, ...d.data() } as T))
-    collectionCache.set(cacheKey, { data, expiresAt: Date.now() + COLLECTION_CACHE_MS })
-    return data
-  }
-
-  const [created, assigned] = await Promise.all([
-    getDocs(query(ref, where('createdByUid', '==', access.uid))),
-    getDocs(query(ref, where('assignedToUid', '==', access.uid))),
-  ])
-  const unique = new Map<string, T>()
-  for (const d of [...created.docs, ...assigned.docs]) {
-    unique.set(d.id, { id: d.id, ...d.data() } as T)
-  }
-  const data = Array.from(unique.values())
-  collectionCache.set(cacheKey, { data, expiresAt: Date.now() + COLLECTION_CACHE_MS })
+  const key = `${access.uid}:${collectionName}`
+  const saved = cache.get(key)
+  if (saved && saved.expiresAt > Date.now()) return saved.data as T[]
+  const data = await getAppDocuments<Record<string, unknown>>(collectionName) as T[]
+  cache.set(key, { data, expiresAt: Date.now() + CACHE_MS })
   return data
 }
 
-// ── AUDIT HISTORY ─────────────────────────────────────────────
-export const auditLogsCol = collection(db, 'auditLogs')
+async function ownership() { const access = await currentAccess(); return { createdByUid: access.uid, createdByName: access.name } }
+function withoutId<T extends object>(value: T) { const { id: _id, ...rest } = value as T & { id?: string }; return rest }
+function newId() { return crypto.randomUUID() }
 
-export async function addAuditLog(data: {
-  action: AuditAction
-  entityType: string
-  entityId?: string
-  description: string
-  changedFields?: string[]
-  path?: string
-}) {
+export async function addAuditLog(data: { action: AuditAction; entityType: string; entityId?: string; description: string; changedFields?: string[]; path?: string }) {
   const access = await currentAccess()
-  await addDoc(auditLogsCol, {
-    actorUid: access.uid,
-    actorName: access.name,
-    actorRole: access.role,
-    action: data.action,
-    entityType: data.entityType,
-    ...(data.entityId ? { entityId: data.entityId } : {}),
-    description: data.description,
-    ...(data.changedFields?.length ? { changedFields: data.changedFields } : {}),
-    path: data.path || (typeof window !== 'undefined' ? window.location.pathname : ''),
-    createdAt: now(),
+  await upsertAppDocument('auditLogs', newId(), {
+    actorUid: access.uid, actorName: access.name, actorRole: access.role, action: data.action,
+    entityType: data.entityType, ...(data.entityId ? { entityId: data.entityId } : {}),
+    description: data.description, ...(data.changedFields?.length ? { changedFields: data.changedFields } : {}),
+    path: data.path || (typeof window !== 'undefined' ? window.location.pathname : ''), createdAt: now(),
   })
 }
 
 async function auditChange(action: AuditAction, entityType: string, entityId: string | undefined, description: string, changedFields?: string[]) {
-  try {
-    await addAuditLog({ action, entityType, entityId, description, changedFields })
-  } catch (error) {
-    console.error('Audit log could not be written', error)
-  }
+  try { await addAuditLog({ action, entityType, entityId, description, changedFields }) } catch (error) { console.error('Audit log could not be written', error) }
 }
 
 export async function getAuditLogs(resultLimit = 500) {
-  const access = await currentAccess()
-  if (!access.isAdmin) throw new Error('Само администратор има достъп до историята')
-  const snap = await getDocs(query(auditLogsCol, orderBy('createdAt', 'desc'), limit(resultLimit)))
-  return snap.docs.map(item => ({ id: item.id, ...item.data() } as AuditLog))
+  if (!(await currentAccess()).isAdmin) throw new Error('Само администратор има достъп до историята')
+  const rows = await getAppDocuments<Record<string, unknown>>('auditLogs') as unknown as AuditLog[]
+  return rows.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || '')).slice(0, resultLimit)
 }
 
 export async function clearAuditHistory() {
-  const access = await currentAccess()
-  if (!access.isAdmin) throw new Error('Само администратор може да изтрива историята')
+  if (!(await currentAccess()).isAdmin) throw new Error('Само администратор може да изтрива историята')
+  const count = await deleteAppDocuments('auditLogs')
+  await addAuditLog({ action: 'delete', entityType: 'auditHistory', description: `Изтрита е историята с ${count} събития`, path: '/admin/history' })
+  return count
+}
 
-  const snapshot = await getDocs(auditLogsCol)
-  if (snapshot.empty) return 0
-
-  for (let offset = 0; offset < snapshot.docs.length; offset += 400) {
-    const batch = writeBatch(db)
-    snapshot.docs.slice(offset, offset + 400).forEach(item => batch.delete(item.ref))
-    await batch.commit()
-  }
-
-  await addAuditLog({
-    action: 'delete',
-    entityType: 'auditHistory',
-    description: `Изтрита е историята с ${snapshot.size} събития`,
-    path: '/admin/history',
+export interface CursorPage<T> { data: T[]; total: number; nextCursor: Cursor | null; hasNext: boolean }
+async function cursorPage<T extends { id: string }>(collectionName: string, pageSize: number, cursor: Cursor | null, sortField: string, direction: 'asc' | 'desc' = 'asc'): Promise<CursorPage<T>> {
+  const rows = await visibleCollection<T>(collectionName)
+  rows.sort((a, b) => {
+    const av = sortField === 'externalId' ? Number((a as unknown as Record<string, unknown>)[sortField] || a.id) : String((a as unknown as Record<string, unknown>)[sortField] || '')
+    const bv = sortField === 'externalId' ? Number((b as unknown as Record<string, unknown>)[sortField] || b.id) : String((b as unknown as Record<string, unknown>)[sortField] || '')
+    const cmp = typeof av === 'number' && typeof bv === 'number' ? av - bv : String(av).localeCompare(String(bv), 'bg')
+    return direction === 'asc' ? cmp : -cmp
   })
-  return snapshot.size
+  const offset = Number(cursor || 0), data = rows.slice(offset, offset + pageSize), next = offset + data.length
+  return { data, total: rows.length, nextCursor: next < rows.length ? String(next) : null, hasNext: next < rows.length }
 }
 
-export interface CursorPage<T> {
-  data: T[]
-  total: number
-  nextCursor: DocumentSnapshot<DocumentData> | null
-  hasNext: boolean
-}
-
-async function publicCursorPage<T>(
-  collectionName: string,
-  pageSize: number,
-  cursor: DocumentSnapshot<DocumentData> | null,
-  sortField: string,
-  direction: 'asc' | 'desc' = 'asc',
-): Promise<CursorPage<T>> {
-  await currentAccess()
-  const ref = collection(db, collectionName)
-  const constraints: QueryConstraint[] = [orderBy(sortField, direction)]
-  if (cursor) constraints.push(startAfter(cursor))
-  constraints.push(limit(pageSize + 1))
-
-  const cachedCount = collectionCountCache.get(collectionName)
-  const [snap, total] = await Promise.all([
-    getDocs(query(ref, ...constraints)),
-    cachedCount && cachedCount.expiresAt > Date.now()
-      ? Promise.resolve(cachedCount.count)
-      : getCountFromServer(ref).then(result => {
-          const count = result.data().count
-          collectionCountCache.set(collectionName, { count, expiresAt: Date.now() + COLLECTION_CACHE_MS })
-          return count
-        }),
-  ])
-  const pageDocs = snap.docs.slice(0, pageSize)
-  return {
-    data: pageDocs.map(item => ({ id: item.id, ...item.data() } as T)),
-    total,
-    nextCursor: pageDocs.at(-1) || null,
-    hasNext: snap.docs.length > pageSize,
-  }
-}
-
-async function ownership() {
-  const access = await currentAccess()
-  return { createdByUid: access.uid, createdByName: access.name }
-}
-
-// ── BENEFICIARY REQUESTS ──────────────────────────────────────
-export const requestsCol = collection(db, 'beneficiaryRequests')
-
-export async function getRequests(params: {
-  page?: number; perPage?: number; search?: SearchParams
-} = {}) {
-  const { page = 1, perPage = 20, search } = params
-
-  // Без orderBy за да избегнем нужда от composite index
-  let all = await visibleCollection<BeneficiaryRequest>('beneficiaryRequests')
-
-  // Всички останали филтри client-side
-  if (search?.id)          all = all.filter(r => r.id.includes(search.id!))
+export async function getRequests(params: { page?: number; perPage?: number; search?: SearchParams } = {}) {
+  const { page = 1, perPage = 20, search } = params; let all = await visibleCollection<BeneficiaryRequest>('beneficiaryRequests')
+  if (search?.id) all = all.filter(r => r.id.includes(search.id!))
   if (search?.beneficiary) all = all.filter(r => r.beneficiaryName?.toLowerCase().includes(search.beneficiary!.toLowerCase()))
-  if (search?.activity)    all = all.filter(r => r.activity?.toLowerCase().includes(search.activity!.toLowerCase()))
-  if (search?.dateFrom)    all = all.filter(r => r.createdAt >= search.dateFrom!)
-  if (search?.dateTo)      all = all.filter(r => r.createdAt <= search.dateTo!)
-
-  // Сортираме client-side по createdAt desc
-  all.sort((a, b) => (b.createdAt ?? '').localeCompare(a.createdAt ?? ''))
-
-  const start = (page - 1) * perPage
+  if (search?.activity) all = all.filter(r => r.activity?.toLowerCase().includes(search.activity!.toLowerCase()))
+  if (search?.dateFrom) all = all.filter(r => r.createdAt >= search.dateFrom!)
+  if (search?.dateTo) all = all.filter(r => r.createdAt <= search.dateTo!)
+  all.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || '')); const start = (page - 1) * perPage
   return { data: all.slice(start, start + perPage), total: all.length, page, perPage }
 }
+export function getRequestsPage(pageSize = 25, cursor: Cursor | null = null) { return cursorPage<BeneficiaryRequest>('beneficiaryRequests', pageSize, cursor, 'createdAt', 'desc') }
+export function getRequest(id: string) { return getAppDocument<BeneficiaryRequest>('beneficiaryRequests', id) }
+export async function addRequest(data: Omit<BeneficiaryRequest, 'id' | 'createdAt' | 'updatedAt'>) { const id = newId(); await upsertAppDocument('beneficiaryRequests', id, { ...data, ...await ownership(), createdAt: now(), updatedAt: now() }); clearCache('beneficiaryRequests'); await auditChange('create', 'beneficiaryRequest', id, 'Създадена е заявка за дейност', Object.keys(data)); return id }
+export async function updateRequest(id: string, data: Partial<BeneficiaryRequest>) { await updateAppDocument('beneficiaryRequests', id, { ...withoutId(data), updatedAt: now() }); clearCache('beneficiaryRequests'); await auditChange('update', 'beneficiaryRequest', id, 'Редактирана е заявка за дейност', Object.keys(data)) }
+export async function deleteRequests(ids: string[]) { await deleteAppDocuments('beneficiaryRequests', ids); clearCache('beneficiaryRequests'); await auditChange('delete', 'beneficiaryRequest', ids.join(', '), `Изтрити са ${ids.length} заявки`) }
+export async function updateRequestStatus(id: string, status: RequestStatus) { await updateRequest(id, { status }); await addNotification({ type: 'status_change', title: 'Промяна на статус на заявка', message: `Заявка #${id} е променена на: ${status}`, isRead: false, relatedId: id, relatedType: 'beneficiaryRequest' }) }
 
-export async function getRequestsPage(
-  pageSize = 25,
-  cursor: DocumentSnapshot<DocumentData> | null = null,
-): Promise<CursorPage<BeneficiaryRequest>> {
-  const access = await currentAccess()
-  if (!access.isAdmin) {
-    const visible = await visibleCollection<BeneficiaryRequest>('beneficiaryRequests')
-    visible.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''))
-    return {
-      data: visible,
-      total: visible.length,
-      nextCursor: null,
-      hasNext: false,
-    }
-  }
-  return publicCursorPage<BeneficiaryRequest>('beneficiaryRequests', pageSize, cursor, 'createdAt', 'desc')
-}
+export async function getBeneficiaries(search?: string) { let data = await visibleCollection<Beneficiary>('beneficiaries'); data.sort((a, b) => (a.lastName || '').localeCompare(b.lastName || '', 'bg')); if (search) { const s = search.toLowerCase(); data = data.filter(b => b.firstName?.toLowerCase().includes(s) || b.lastName?.toLowerCase().includes(s) || b.email?.toLowerCase().includes(s) || b.phone?.includes(s)) } return data }
+export async function searchBeneficiaries(term: string, resultLimit = 100) { const value = term.trim().toLocaleLowerCase('bg'); if (!value) return []; return (await visibleCollection<Beneficiary>('beneficiaries')).filter(item => [item.id, item.firstName, item.lastName, item.middleName, item.email, item.egn, item.phone].some(field => String(field || '').toLocaleLowerCase('bg').includes(value))).slice(0, resultLimit) }
+export function getBeneficiariesPage(pageSize = 25, cursor: Cursor | null = null, sortKey: 'id' | 'firstName' | 'lastName' = 'lastName', direction: 'asc' | 'desc' = 'asc') { return cursorPage<Beneficiary>('beneficiaries', pageSize, cursor, sortKey === 'id' ? 'externalId' : sortKey, direction) }
+export function getBeneficiary(id: string) { return getAppDocument<Beneficiary>('beneficiaries', id) }
+export async function addBeneficiary(data: Omit<Beneficiary, 'id' | 'createdAt' | 'updatedAt'>) { let id = ''; for (let attempt = 0; attempt < 20; attempt++) { const candidate = String(100000 + Math.floor(Math.random() * 900000)); if (!(await getAppDocument('beneficiaries', candidate))) { id = candidate; break } } if (!id) throw new Error('Не може да бъде създаден свободен цифров ID'); await upsertAppDocument('beneficiaries', id, { ...data, externalId: Number(data.externalId || id), ...await ownership(), createdAt: now(), updatedAt: now() }); clearCache('beneficiaries'); await auditChange('create', 'beneficiary', id, 'Създаден е нов бенефициент', Object.keys(data)); return id }
+export async function updateBeneficiary(id: string, data: Partial<Beneficiary>) { await updateAppDocument('beneficiaries', id, { ...withoutId(data), updatedAt: now() }); clearCache('beneficiaries'); await auditChange('update', 'beneficiary', id, 'Редактиран е бенефициент', Object.keys(data)) }
+export async function deleteBeneficiary(id: string) { await deleteAppDocuments('beneficiaries', [id]); clearCache('beneficiaries'); await auditChange('delete', 'beneficiary', id, 'Изтрит е бенефициент') }
 
-export async function getRequest(id: string) {
-  const snap = await getDoc(doc(requestsCol, id))
-  return toData<BeneficiaryRequest>(snap)
-}
+export async function getTasks() { return (await visibleCollection<Task>('tasks')).sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || '')) }
+export async function addTask(data: Omit<Task, 'id' | 'createdAt' | 'updatedAt'>) { const id = newId(); await upsertAppDocument('tasks', id, { ...data, ...await ownership(), createdAt: now(), updatedAt: now() }); clearCache('tasks'); await auditChange('create', 'task', id, 'Създадена е задача', Object.keys(data)); return id }
+export async function updateTask(id: string, data: Partial<Task>) { await updateAppDocument('tasks', id, { ...withoutId(data), updatedAt: now() }); clearCache('tasks'); await auditChange('update', 'task', id, 'Редактирана е задача', Object.keys(data)) }
+export async function deleteTask(id: string) { await deleteAppDocuments('tasks', [id]); clearCache('tasks'); await auditChange('delete', 'task', id, 'Изтрита е задача') }
 
-export async function addRequest(data: Omit<BeneficiaryRequest, 'id' | 'createdAt' | 'updatedAt'>) {
-  const ref = await addDoc(requestsCol, { ...data, ...await ownership(), createdAt: now(), updatedAt: now() })
-  clearCollectionCache('beneficiaryRequests')
-  await auditChange('create', 'beneficiaryRequest', ref.id, 'Създадена е заявка за дейност', Object.keys(data))
-  return ref.id
-}
+export async function getScheduleEntries(month: string) { const next = new Date(`${month}-01T00:00:00Z`); next.setUTCMonth(next.getUTCMonth() + 1); const end = next.toISOString().slice(0, 10); return (await visibleCollection<ScheduleEntry>('schedule')).filter(item => item.date >= `${month}-01` && item.date < end).sort((a, b) => `${a.date} ${a.time}`.localeCompare(`${b.date} ${b.time}`, 'bg')) }
+export async function addScheduleEntry(data: Omit<ScheduleEntry, 'id' | 'createdAt' | 'updatedAt'>) { const id = newId(); await upsertAppDocument('schedule', id, { ...data, ...await ownership(), createdAt: now(), updatedAt: now() }); clearCache('schedule'); await auditChange('create', 'schedule', id, 'Добавен е запис в графика', Object.keys(data)); return id }
+export async function updateScheduleEntry(id: string, data: Partial<ScheduleEntry>) { await updateAppDocument('schedule', id, { ...withoutId(data), updatedAt: now() }); clearCache('schedule'); await auditChange('update', 'schedule', id, 'Редактиран е запис в графика', Object.keys(data)) }
+export async function deleteScheduleEntries(ids: string[]) { await deleteAppDocuments('schedule', ids); clearCache('schedule'); await auditChange('delete', 'schedule', ids.join(', '), `Изтрити са ${ids.length} записа от графика`) }
+export async function importScheduleEntries(entries: Array<Pick<ScheduleEntry, 'date' | 'time' | 'description' | 'phone' | 'performers' | 'sourceRow'>>) { const access = await currentAccess(); if (!access.isAdmin) throw new Error('Само администратор може да импортира график'); const stamp = now(); await upsertAppDocuments(entries.map((entry, index) => ({ collection_name: 'schedule', id: `schedule-2026-plovdiv-${String(entry.sourceRow || index + 1).padStart(5, '0')}`, data: { ...entry, createdByUid: access.uid, createdByName: access.name, createdAt: stamp, updatedAt: stamp } }))); clearCache('schedule'); await auditChange('import', 'schedule', undefined, `Импортирани са ${entries.length} записа в графика`); return entries.length }
 
-export async function updateRequest(id: string, data: Partial<BeneficiaryRequest>) {
-  await updateDoc(doc(requestsCol, id), { ...data, updatedAt: now() })
-  clearCollectionCache('beneficiaryRequests')
-  await auditChange('update', 'beneficiaryRequest', id, 'Редактирана е заявка за дейност', Object.keys(data))
-}
+export async function getEmployers(search?: string) { let data = (await visibleCollection<Employer>('employers')).sort((a, b) => (a.name || '').localeCompare(b.name || '', 'bg')); if (search) { const s = search.toLowerCase(); data = data.filter(e => e.name?.toLowerCase().includes(s) || e.city?.toLowerCase().includes(s) || e.eik?.includes(s)) } return data }
+export async function addEmployer(data: Omit<Employer, 'id' | 'createdAt' | 'updatedAt'>) { const id = newId(); await upsertAppDocument('employers', id, { ...data, ...await ownership(), createdAt: now(), updatedAt: now() }); clearCache('employers'); await auditChange('create', 'employer', id, 'Създаден е работодател', Object.keys(data)); return id }
+export async function updateEmployer(id: string, data: Partial<Employer>) { await updateAppDocument('employers', id, { ...withoutId(data), updatedAt: now() }); clearCache('employers'); await auditChange('update', 'employer', id, 'Редактиран е работодател', Object.keys(data)) }
+export async function deleteEmployer(id: string) { await deleteAppDocuments('employers', [id]); clearCache('employers'); await auditChange('delete', 'employer', id, 'Изтрит е работодател') }
+export async function getVolunteers() { return (await visibleCollection<Volunteer>('volunteers')).sort((a, b) => `${a.lastName} ${a.firstName}`.localeCompare(`${b.lastName} ${b.firstName}`, 'bg')) }
+export async function addVolunteer(data: Omit<Volunteer, 'id' | 'createdAt' | 'updatedAt'>) { const id = newId(); await upsertAppDocument('volunteers', id, { ...data, ...await ownership(), createdAt: now(), updatedAt: now() }); clearCache('volunteers'); await auditChange('create', 'volunteer', id, 'Създаден е доброволец', Object.keys(data)); return id }
+export async function updateVolunteer(id: string, data: Partial<Volunteer>) { await updateAppDocument('volunteers', id, { ...withoutId(data), updatedAt: now() }); clearCache('volunteers'); await auditChange('update', 'volunteer', id, 'Редактиран е доброволец', Object.keys(data)) }
+export async function deleteVolunteer(id: string) { await deleteAppDocuments('volunteers', [id]); clearCache('volunteers'); await auditChange('delete', 'volunteer', id, 'Изтрит е доброволец') }
+export async function getDonors() { return (await visibleCollection<Donor>('donors')).sort((a, b) => { const an = a.entityType === 'Юридическо лице' ? a.organizationName : `${a.firstName} ${a.lastName}`, bn = b.entityType === 'Юридическо лице' ? b.organizationName : `${b.firstName} ${b.lastName}`; return (an || '').localeCompare(bn || '', 'bg') }) }
+export async function addDonor(data: Omit<Donor, 'id' | 'createdAt' | 'updatedAt'>) { const id = newId(); await upsertAppDocument('donors', id, { ...data, ...await ownership(), createdAt: now(), updatedAt: now() }); clearCache('donors'); await auditChange('create', 'donor', id, 'Създаден е дарител', Object.keys(data)); return id }
+export async function updateDonor(id: string, data: Partial<Donor>) { await updateAppDocument('donors', id, { ...withoutId(data), updatedAt: now() }); clearCache('donors'); await auditChange('update', 'donor', id, 'Редактиран е дарител', Object.keys(data)) }
+export async function deleteDonor(id: string) { await deleteAppDocuments('donors', [id]); clearCache('donors'); await auditChange('delete', 'donor', id, 'Изтрит е дарител') }
 
-export async function deleteRequests(ids: string[]) {
-  const batch = writeBatch(db)
-  ids.forEach(id => batch.delete(doc(requestsCol, id)))
-  await batch.commit()
-  clearCollectionCache('beneficiaryRequests')
-  await auditChange('delete', 'beneficiaryRequest', ids.join(', '), `Изтрити са ${ids.length} заявки`)
-}
+export async function getNotifications(unreadOnly = false) { let data = await visibleCollection<Notification>('notifications'); if (unreadOnly) data = data.filter(item => !item.isRead); return data.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || '')).slice(0, 50) }
+export async function addNotification(data: Omit<Notification, 'id' | 'createdAt'>) { await upsertAppDocument('notifications', newId(), { ...data, ...await ownership(), createdAt: now() }); clearCache('notifications') }
+export async function markNotificationRead(id: string) { await updateAppDocument('notifications', id, { isRead: true }); clearCache('notifications') }
+export async function markAllNotificationsRead() { await Promise.all((await getNotifications(true)).map(item => updateAppDocument('notifications', item.id, { isRead: true }))); clearCache('notifications') }
+export function subscribeToNotifications(callback: (notifs: Notification[]) => void) { let active = true; const refresh = () => { clearCache('notifications'); void getNotifications().then(rows => { if (active) callback(rows.slice(0, 20)) }).catch(() => {}) }; refresh(); const timer = window.setInterval(refresh, 60_000); return () => { active = false; window.clearInterval(timer) } }
+export function subscribeToOnlineUsers(callback: (users: AdminUser[]) => void, onError?: () => void) { let active = true; const refresh = () => { clearCache('presence'); void getAppDocuments<Record<string, unknown>>('presence').then(rows => { if (active) callback((rows as unknown as AdminUser[]).filter(item => item.isOnline).sort((a, b) => (a.displayName || '').localeCompare(b.displayName || '', 'bg'))) }).catch(() => onError?.()) }; refresh(); const timer = window.setInterval(refresh, 30_000); return () => { active = false; window.clearInterval(timer) } }
 
-export async function updateRequestStatus(id: string, status: RequestStatus) {
-  await updateDoc(doc(requestsCol, id), { status, updatedAt: now() })
-  clearCollectionCache('beneficiaryRequests')
-  await auditChange('update', 'beneficiaryRequest', id, `Променен е статусът на заявка на „${status}“`, ['status'])
-  await addNotification({
-    type: 'status_change',
-    title: 'Промяна на статус на заявка',
-    message: `Заявка #${id} е променена на: ${status}`,
-    isRead: false,
-    relatedId: id,
-    relatedType: 'beneficiaryRequest'
-  })
-}
+export async function getUsers() { const rows = await getAppDocuments<AdminUser>('users'); return rows.map(row => ({ ...row, uid: row.uid || row.id })) }
+export async function getUser(uid: string) { const row = await getAppDocument<AdminUser>('users', uid); return row ? { ...row, uid } : null }
+export async function saveUser(uid: string, data: Partial<AdminUser>) { await upsertAppDocument('users', uid, withoutId(data)); accessCache = null; clearCache('users') }
+export async function patchUser(uid: string, data: Partial<AdminUser>) { await updateAppDocument('users', uid, withoutId(data)); accessCache = null; clearCache('users') }
+export async function deleteUsers(ids: string[]) { const count = await deleteAppDocuments('users', ids); clearCache('users'); return count }
+export async function replaceImportDocuments(items: Array<{ collectionName: 'beneficiaries' | 'beneficiaryRequests'; id: string; data: Record<string, unknown> }>) { await upsertAppDocuments(items.map(item => ({ collection_name: item.collectionName, id: item.id, data: item.data }))); clearCache('beneficiaries'); clearCache('beneficiaryRequests') }
+export async function getExistingImportIds(collectionName: 'beneficiaries' | 'beneficiaryRequests', ids: string[]) { return new Set((await getAppDocumentsByIds<Record<string, unknown>>(collectionName, ids)).map(item => item.id)) }
+export async function clearImportCollection(collectionName: 'beneficiaries' | 'beneficiaryRequests') { const count = await deleteAppDocuments(collectionName); clearCache(collectionName); return count }
 
-// ── BENEFICIARIES ─────────────────────────────────────────────
-export const beneficiariesCol = collection(db, 'beneficiaries')
-
-export async function getBeneficiaries(search?: string) {
-  let data = await visibleCollection<Beneficiary>('beneficiaries')
-  data.sort((a, b) => (a.lastName || '').localeCompare(b.lastName || '', 'bg'))
-  if (search) {
-    const s = search.toLowerCase()
-    data = data.filter(b =>
-      b.firstName?.toLowerCase().includes(s) ||
-      b.lastName?.toLowerCase().includes(s) ||
-      b.email?.toLowerCase().includes(s) ||
-      b.phone?.includes(s)
-    )
-  }
-  return data
-}
-
-export async function searchBeneficiaries(term: string, resultLimit = 100) {
-  await currentAccess()
-  const value = term.trim()
-  if (!value) return []
-
-  const results = new Map<string, Beneficiary>()
-  const variants = Array.from(new Set([
-    value,
-    value.charAt(0).toLocaleUpperCase('bg-BG') + value.slice(1).toLocaleLowerCase('bg-BG'),
-  ]))
-  const searches: Array<Promise<QuerySnapshot<DocumentData>>> = []
-  for (const field of ['firstName', 'lastName', 'middleName', 'email']) {
-    for (const variant of variants) {
-      searches.push(getDocs(query(
-        beneficiariesCol,
-        orderBy(field),
-        startAt(variant),
-        endAt(`${variant}\uf8ff`),
-        limit(Math.min(resultLimit, 50)),
-      )))
-    }
-  }
-  searches.push(getDocs(query(beneficiariesCol, where('egn', '==', value), limit(resultLimit))))
-  searches.push(getDocs(query(beneficiariesCol, where('phone', '==', value), limit(resultLimit))))
-
-  if (/^\d+$/.test(value)) {
-    const exact = await getDoc(doc(beneficiariesCol, value))
-    if (exact.exists()) results.set(exact.id, { id: exact.id, ...exact.data() } as Beneficiary)
-  }
-
-  const snapshots = await Promise.all(searches)
-  for (const snap of snapshots) {
-    for (const item of snap.docs) {
-      results.set(item.id, { id: item.id, ...item.data() } as Beneficiary)
-      if (results.size >= resultLimit) break
-    }
-  }
-  return Array.from(results.values()).slice(0, resultLimit)
-}
-
-export async function getBeneficiariesPage(
-  pageSize = 25,
-  cursor: DocumentSnapshot<DocumentData> | null = null,
-  sortKey: 'id' | 'firstName' | 'lastName' = 'lastName',
-  direction: 'asc' | 'desc' = 'asc',
-) {
-  const sortField = sortKey === 'id' ? 'externalId' : sortKey
-  return publicCursorPage<Beneficiary>('beneficiaries', pageSize, cursor, sortField, direction)
-}
-
-export async function getBeneficiary(id: string) {
-  const snap = await getDoc(doc(beneficiariesCol, id))
-  return toData<Beneficiary>(snap)
-}
-
-export async function addBeneficiary(data: Omit<Beneficiary, 'id' | 'createdAt' | 'updatedAt'>) {
-  let numericId = ''
-  for (let attempt = 0; attempt < 20; attempt++) {
-    const candidate = String(100000 + Math.floor(Math.random() * 900000))
-    if (!(await getDoc(doc(beneficiariesCol, candidate))).exists()) {
-      numericId = candidate
-      break
-    }
-  }
-  if (!numericId) throw new Error('Не може да бъде създаден свободен цифров ID')
-  await setDoc(doc(beneficiariesCol, numericId), {
-    ...data,
-    externalId: Number(data.externalId || numericId),
-    ...await ownership(),
-    createdAt: now(),
-    updatedAt: now(),
-  })
-  clearCollectionCache('beneficiaries')
-  await auditChange('create', 'beneficiary', numericId, 'Създаден е нов бенефициент', Object.keys(data))
-  return numericId
-}
-
-export async function updateBeneficiary(id: string, data: Partial<Beneficiary>) {
-  await updateDoc(doc(beneficiariesCol, id), { ...data, updatedAt: now() })
-  clearCollectionCache('beneficiaries')
-  await auditChange('update', 'beneficiary', id, 'Редактиран е бенефициент', Object.keys(data))
-}
-
-export async function deleteBeneficiary(id: string) {
-  await deleteDoc(doc(beneficiariesCol, id))
-  clearCollectionCache('beneficiaries')
-  await auditChange('delete', 'beneficiary', id, 'Изтрит е бенефициент')
-}
-
-// ── TASKS ─────────────────────────────────────────────────────
-export const tasksCol = collection(db, 'tasks')
-
-export async function getTasks() {
-  const data = await visibleCollection<Task>('tasks')
-  return data.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''))
-}
-
-export async function addTask(data: Omit<Task, 'id' | 'createdAt' | 'updatedAt'>) {
-  const ref = await addDoc(tasksCol, { ...data, ...await ownership(), createdAt: now(), updatedAt: now() })
-  clearCollectionCache('tasks')
-  await auditChange('create', 'task', ref.id, 'Създадена е задача', Object.keys(data))
-  return ref.id
-}
-
-export async function updateTask(id: string, data: Partial<Task>) {
-  await updateDoc(doc(tasksCol, id), { ...data, updatedAt: now() })
-  clearCollectionCache('tasks')
-  await auditChange('update', 'task', id, 'Редактирана е задача', Object.keys(data))
-}
-
-export async function deleteTask(id: string) {
-  await deleteDoc(doc(tasksCol, id))
-  clearCollectionCache('tasks')
-  await auditChange('delete', 'task', id, 'Изтрита е задача')
-}
-
-// ── SCHEDULE ──────────────────────────────────────────────────
-export const scheduleCol = collection(db, 'schedule')
-
-export async function getScheduleEntries(month: string) {
-  await currentAccess()
-  const start = `${month}-01`
-  const nextMonthDate = new Date(`${start}T00:00:00Z`)
-  nextMonthDate.setUTCMonth(nextMonthDate.getUTCMonth() + 1)
-  const end = nextMonthDate.toISOString().slice(0, 10)
-  const snap = await getDocs(query(
-    scheduleCol,
-    where('date', '>=', start),
-    where('date', '<', end),
-    orderBy('date', 'asc'),
-    limit(600),
-  ))
-  return snap.docs
-    .map(item => ({ id: item.id, ...item.data() } as ScheduleEntry))
-    .sort((a, b) => `${a.date} ${a.time}`.localeCompare(`${b.date} ${b.time}`, 'bg'))
-}
-
-export async function addScheduleEntry(data: Omit<ScheduleEntry, 'id' | 'createdAt' | 'updatedAt'>) {
-  const ref = await addDoc(scheduleCol, { ...data, ...await ownership(), createdAt: now(), updatedAt: now() })
-  clearCollectionCache('schedule')
-  await auditChange('create', 'schedule', ref.id, 'Добавен е запис в графика', Object.keys(data))
-  return ref.id
-}
-
-export async function updateScheduleEntry(id: string, data: Partial<ScheduleEntry>) {
-  await updateDoc(doc(scheduleCol, id), { ...data, updatedAt: now() })
-  clearCollectionCache('schedule')
-  await auditChange('update', 'schedule', id, 'Редактиран е запис в графика', Object.keys(data))
-}
-
-export async function deleteScheduleEntries(ids: string[]) {
-  for (let offset = 0; offset < ids.length; offset += 400) {
-    const batch = writeBatch(db)
-    ids.slice(offset, offset + 400).forEach(id => batch.delete(doc(scheduleCol, id)))
-    await batch.commit()
-  }
-  clearCollectionCache('schedule')
-  await auditChange('delete', 'schedule', ids.join(', '), `Изтрити са ${ids.length} записа от графика`)
-}
-
-export async function importScheduleEntries(entries: Array<Pick<ScheduleEntry, 'date' | 'time' | 'description' | 'phone' | 'performers' | 'sourceRow'>>) {
-  const access = await currentAccess()
-  if (!access.isAdmin) throw new Error('Само администратор може да импортира график')
-  const importedAt = now()
-  for (let offset = 0; offset < entries.length; offset += 400) {
-    const batch = writeBatch(db)
-    for (const entry of entries.slice(offset, offset + 400)) {
-      const row = entry.sourceRow || offset + 1
-      const id = `schedule-2026-plovdiv-${String(row).padStart(5, '0')}`
-      batch.set(doc(scheduleCol, id), {
-        ...entry,
-        createdByUid: access.uid,
-        createdByName: access.name,
-        createdAt: importedAt,
-        updatedAt: importedAt,
-      }, { merge: true })
-    }
-    await batch.commit()
-  }
-  clearCollectionCache('schedule')
-  await auditChange('import', 'schedule', undefined, `Импортирани са ${entries.length} записа в графика`)
-  return entries.length
-}
-
-// ── EMPLOYERS ─────────────────────────────────────────────────
-export const employersCol = collection(db, 'employers')
-
-export async function getEmployers(search?: string) {
-  let data = await visibleCollection<Employer>('employers')
-  data.sort((a, b) => (a.name || '').localeCompare(b.name || '', 'bg'))
-  if (search) {
-    const s = search.toLowerCase()
-    data = data.filter(e =>
-      e.name?.toLowerCase().includes(s) ||
-      e.city?.toLowerCase().includes(s) ||
-      e.eik?.includes(s)
-    )
-  }
-  return data
-}
-
-export async function addEmployer(data: Omit<Employer, 'id' | 'createdAt' | 'updatedAt'>) {
-  const ref = await addDoc(employersCol, { ...data, ...await ownership(), createdAt: now(), updatedAt: now() })
-  clearCollectionCache('employers')
-  await auditChange('create', 'employer', ref.id, 'Създаден е работодател', Object.keys(data))
-  return ref.id
-}
-
-export async function updateEmployer(id: string, data: Partial<Employer>) {
-  await updateDoc(doc(employersCol, id), { ...data, updatedAt: now() })
-  clearCollectionCache('employers')
-  await auditChange('update', 'employer', id, 'Редактиран е работодател', Object.keys(data))
-}
-
-export async function deleteEmployer(id: string) {
-  await deleteDoc(doc(employersCol, id))
-  clearCollectionCache('employers')
-  await auditChange('delete', 'employer', id, 'Изтрит е работодател')
-}
-
-// ── VOLUNTEERS ────────────────────────────────────────────────
-export const volunteersCol = collection(db, 'volunteers')
-
-export async function getVolunteers() {
-  const data = await visibleCollection<Volunteer>('volunteers')
-  return data.sort((a, b) => `${a.lastName} ${a.firstName}`.localeCompare(`${b.lastName} ${b.firstName}`, 'bg'))
-}
-
-export async function addVolunteer(data: Omit<Volunteer, 'id' | 'createdAt' | 'updatedAt'>) {
-  const ref = await addDoc(volunteersCol, { ...data, ...await ownership(), createdAt: now(), updatedAt: now() })
-  clearCollectionCache('volunteers')
-  await auditChange('create', 'volunteer', ref.id, 'Създаден е доброволец', Object.keys(data))
-  return ref.id
-}
-
-export async function updateVolunteer(id: string, data: Partial<Volunteer>) {
-  await updateDoc(doc(volunteersCol, id), { ...data, updatedAt: now() })
-  clearCollectionCache('volunteers')
-  await auditChange('update', 'volunteer', id, 'Редактиран е доброволец', Object.keys(data))
-}
-
-export async function deleteVolunteer(id: string) {
-  await deleteDoc(doc(volunteersCol, id))
-  clearCollectionCache('volunteers')
-  await auditChange('delete', 'volunteer', id, 'Изтрит е доброволец')
-}
-
-// ── DONORS ────────────────────────────────────────────────────
-export const donorsCol = collection(db, 'donors')
-
-export async function getDonors() {
-  const data = await visibleCollection<Donor>('donors')
-  return data.sort((a, b) => {
-    const an = a.entityType === 'Юридическо лице' ? a.organizationName : `${a.firstName} ${a.lastName}`
-    const bn = b.entityType === 'Юридическо лице' ? b.organizationName : `${b.firstName} ${b.lastName}`
-    return (an || '').localeCompare(bn || '', 'bg')
-  })
-}
-
-export async function addDonor(data: Omit<Donor, 'id' | 'createdAt' | 'updatedAt'>) {
-  const ref = await addDoc(donorsCol, { ...data, ...await ownership(), createdAt: now(), updatedAt: now() })
-  clearCollectionCache('donors')
-  await auditChange('create', 'donor', ref.id, 'Създаден е дарител', Object.keys(data))
-  return ref.id
-}
-
-export async function updateDonor(id: string, data: Partial<Donor>) {
-  await updateDoc(doc(donorsCol, id), { ...data, updatedAt: now() })
-  clearCollectionCache('donors')
-  await auditChange('update', 'donor', id, 'Редактиран е дарител', Object.keys(data))
-}
-
-export async function deleteDonor(id: string) {
-  await deleteDoc(doc(donorsCol, id))
-  clearCollectionCache('donors')
-  await auditChange('delete', 'donor', id, 'Изтрит е дарител')
-}
-
-// ── NOTIFICATIONS ─────────────────────────────────────────────
-export const notificationsCol = collection(db, 'notifications')
-
-export async function getNotifications(unreadOnly = false) {
-  let data = await visibleCollection<Notification>('notifications')
-  if (unreadOnly) data = data.filter(item => !item.isRead)
-  return data.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || '')).slice(0, 50)
-}
-
-export async function addNotification(data: Omit<Notification, 'id' | 'createdAt'>) {
-  await addDoc(notificationsCol, { ...data, ...await ownership(), createdAt: now() })
-}
-
-export async function markNotificationRead(id: string) {
-  await updateDoc(doc(notificationsCol, id), { isRead: true })
-}
-
-export async function markAllNotificationsRead() {
-  const visible = await getNotifications(true)
-  const batch = writeBatch(db)
-  visible.forEach(item => batch.update(doc(notificationsCol, item.id), { isRead: true }))
-  await batch.commit()
-}
-
-export function subscribeToNotifications(callback: (notifs: Notification[]) => void) {
-  const uid = auth.currentUser?.uid
-  if (!uid) return () => {}
-  const q = query(notificationsCol, where('createdByUid', '==', uid), limit(50))
-  return onSnapshot(q, snap => {
-    callback(snap.docs
-      .map(d => ({ id: d.id, ...d.data() } as Notification))
-      .sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''))
-      .slice(0, 20))
-  })
-}
-
-export function subscribeToOnlineUsers(callback: (users: AdminUser[]) => void, onError?: () => void) {
-  const q = query(collection(db, 'presence'), where('isOnline', '==', true))
-  return onSnapshot(q, snap => {
-    callback(snap.docs
-      .map(d => ({ uid: d.id, email: '', role: 'user', createdAt: '', ...d.data() } as AdminUser))
-      .sort((a, b) => a.displayName.localeCompare(b.displayName, 'bg')))
-  }, () => onError?.())
-}
-
-// ── EXPORT ────────────────────────────────────────────────────
-export async function getExportData(dateFrom?: string, dateTo?: string) {
-  let data = await visibleCollection<BeneficiaryRequest>('beneficiaryRequests')
-  if (dateFrom) data = data.filter(r => r.createdAt >= dateFrom)
-  if (dateTo)   data = data.filter(r => r.createdAt <= dateTo)
-  return data
-}
-
-// ── DASHBOARD STATS ───────────────────────────────────────────
-export async function getDashboardStats() {
-  const access = await currentAccess()
-  const sharedCounts = await Promise.all([
-    getCountFromServer(beneficiariesCol),
-    getCountFromServer(employersCol),
-    getCountFromServer(volunteersCol),
-    getCountFromServer(donorsCol),
-  ])
-
-  if (access.isAdmin) {
-    const [allRequests, confirmed, pending, rejected, allTasks] = await Promise.all([
-      getCountFromServer(requestsCol),
-      getCountFromServer(query(requestsCol, where('status', '==', 'Потвърдено'))),
-      getCountFromServer(query(requestsCol, where('status', '==', 'Чакащ'))),
-      getCountFromServer(query(requestsCol, where('status', '==', 'Отхвърлено'))),
-      getCountFromServer(tasksCol),
-    ])
-
-    return {
-      totalRequests: allRequests.data().count,
-      confirmedRequests: confirmed.data().count,
-      pendingRequests: pending.data().count,
-      rejectedRequests: rejected.data().count,
-      totalBeneficiaries: sharedCounts[0].data().count,
-      totalTasks: allTasks.data().count,
-      totalEmployers: sharedCounts[1].data().count,
-      totalVolunteers: sharedCounts[2].data().count,
-      totalDonors: sharedCounts[3].data().count,
-    }
-  }
-
-  const [requests, tasks] = await Promise.all([
-    visibleCollection<BeneficiaryRequest>('beneficiaryRequests'),
-    visibleCollection<Task>('tasks'),
-  ])
-
-  return {
-    totalRequests:      requests.length,
-    confirmedRequests:  requests.filter(r => r.status === 'Потвърдено').length,
-    pendingRequests:    requests.filter(r => r.status === 'Чакащ').length,
-    rejectedRequests:   requests.filter(r => r.status === 'Отхвърлено').length,
-    totalBeneficiaries: sharedCounts[0].data().count,
-    totalTasks:         tasks.length,
-    totalEmployers:     sharedCounts[1].data().count,
-    totalVolunteers:    sharedCounts[2].data().count,
-    totalDonors:        sharedCounts[3].data().count,
-  }
-}
+export async function getExportData(dateFrom?: string, dateTo?: string) { let data = await visibleCollection<BeneficiaryRequest>('beneficiaryRequests'); if (dateFrom) data = data.filter(r => r.createdAt >= dateFrom); if (dateTo) data = data.filter(r => r.createdAt <= dateTo); return data }
+export async function getDashboardStats() { const [requests, tasks, totalBeneficiaries, totalEmployers, totalVolunteers, totalDonors] = await Promise.all([visibleCollection<BeneficiaryRequest>('beneficiaryRequests'), visibleCollection<Task>('tasks'), countAppDocuments('beneficiaries'), countAppDocuments('employers'), countAppDocuments('volunteers'), countAppDocuments('donors')]); return { totalRequests: requests.length, confirmedRequests: requests.filter(r => r.status === 'Потвърдено').length, pendingRequests: requests.filter(r => r.status === 'Чакащ').length, rejectedRequests: requests.filter(r => r.status === 'Отхвърлено').length, totalBeneficiaries, totalTasks: tasks.length, totalEmployers, totalVolunteers, totalDonors } }

@@ -1,7 +1,5 @@
 import { initializeApp, getApps } from 'firebase/app'
 import { getAuth } from 'firebase/auth'
-import { getFirestore } from 'firebase/firestore'
-import { getDatabase } from 'firebase/database'
 import { getAnalytics, isSupported } from 'firebase/analytics'
 
 export const firebaseConfig = {
@@ -18,8 +16,6 @@ export const firebaseConfig = {
 const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0]
 
 export const auth = getAuth(app)
-export const db = getFirestore(app)
-export const rtdb = getDatabase(app) // Realtime Database (за нотификации)
 
 // Analytics само в browser
 if (typeof window !== 'undefined') {

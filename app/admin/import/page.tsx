@@ -1,8 +1,6 @@
 'use client'
 import { useCallback, useRef, useState } from 'react'
 import AdminLayout from '@/components/layout/AdminLayout'
-import { auth, db } from '@/lib/firebase'
-import { collection, doc, documentId, getDoc, getDocs, query, where, writeBatch } from 'firebase/firestore'
 import { AlertTriangle, CheckCircle, ChevronDown, ChevronUp, FileSpreadsheet, RefreshCw, Upload } from 'lucide-react'
 import toast, { Toaster } from 'react-hot-toast'
 import * as XLSX from 'xlsx'
@@ -10,7 +8,10 @@ import {
   detectSheetType, mapBeneficiaryRow, mapRequestRow,
   type ImportSheetType, type RawRow,
 } from '@/lib/import-mapping'
-import { addAuditLog } from '@/lib/db'
+import {
+  addAuditLog, clearImportCollection, currentAccess, getExistingImportIds,
+  replaceImportDocuments,
+} from '@/lib/db'
 
 interface SheetPreview {
   name: string
@@ -34,52 +35,26 @@ type WriteItem = { collectionName: 'beneficiaries' | 'beneficiaryRequests'; id: 
 type AdminIdentity = { uid: string; name: string }
 
 async function requireAdmin() {
-  await auth.authStateReady()
-  const user = auth.currentUser
-  if (!user) throw new Error('Необходим е вход в системата')
-  const profile = await getDoc(doc(db, 'users', user.uid))
-  if (!profile.exists() || profile.data().role !== 'admin') throw new Error('Само администратор може да импортира данни')
-  return { uid: user.uid, name: profile.data().displayName || user.email || 'Администратор' }
+  const access = await currentAccess()
+  if (!access.isAdmin) throw new Error('Само администратор може да импортира данни')
+  return { uid: access.uid, name: access.name }
 }
 
 async function deleteCollection(collectionName: string, onProgress: (value: number) => void) {
-  const snapshot = await getDocs(collection(db, collectionName))
-  for (let offset = 0; offset < snapshot.docs.length; offset += 400) {
-    const batch = writeBatch(db)
-    snapshot.docs.slice(offset, offset + 400).forEach(item => batch.delete(item.ref))
-    await batch.commit()
-    onProgress(Math.round(Math.min(offset + 400, snapshot.docs.length) / Math.max(snapshot.docs.length, 1) * 100))
-  }
+  await clearImportCollection(collectionName as WriteItem['collectionName'])
+  onProgress(100)
 }
 
 async function commitWrites(items: WriteItem[], onProgress: (value: number) => void) {
-  for (let offset = 0; offset < items.length; offset += 400) {
-    const batch = writeBatch(db)
-    for (const item of items.slice(offset, offset + 400)) {
-      batch.set(doc(db, item.collectionName, item.id), item.data, { merge: true })
-    }
-    await batch.commit()
-    onProgress(Math.round(Math.min(offset + 400, items.length) / Math.max(items.length, 1) * 100))
+  for (let offset = 0; offset < items.length; offset += 500) {
+    await replaceImportDocuments(items.slice(offset, offset + 500))
+    onProgress(Math.round(Math.min(offset + 500, items.length) / Math.max(items.length, 1) * 100))
   }
 }
 
 async function getExistingDocumentIds(collectionName: WriteItem['collectionName'], ids: string[]) {
-  const existing = new Set<string>()
   const uniqueIds = Array.from(new Set(ids))
-
-  // Firestore supports up to 30 values for an `in` query. This reads only
-  // documents referenced by the import instead of downloading the collection.
-  for (let offset = 0; offset < uniqueIds.length; offset += 30) {
-    const idBatch = uniqueIds.slice(offset, offset + 30)
-    if (!idBatch.length) continue
-    const snapshot = await getDocs(query(
-      collection(db, collectionName),
-      where(documentId(), 'in', idBatch),
-    ))
-    snapshot.docs.forEach(item => existing.add(item.id))
-  }
-
-  return existing
+  return getExistingImportIds(collectionName, uniqueIds)
 }
 
 async function importSheet(
