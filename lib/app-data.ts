@@ -6,6 +6,23 @@ export interface AppDocument<T extends object = Record<string, unknown>> {
   data: T
 }
 
+export interface SupabaseUsageCollection {
+  collectionName: string
+  recordCount: number
+  dataBytes: number
+}
+
+export interface SupabaseUsage {
+  databaseBytes: number
+  databaseLimitBytes: number
+  storageBytes: number
+  storageLimitBytes: number
+  storageObjects: number
+  totalRecords: number
+  collections: SupabaseUsageCollection[]
+  measuredAt: string
+}
+
 function fail(error: { message: string } | null) {
   if (error) throw new Error(error.message)
 }
@@ -89,4 +106,10 @@ export async function countAppDocuments(collectionName: string) {
     .eq('collection_name', collectionName)
   fail(error)
   return count || 0
+}
+
+export async function getAppUsage() {
+  const { data, error } = await supabase.rpc('get_app_usage')
+  fail(error)
+  return data as unknown as SupabaseUsage
 }

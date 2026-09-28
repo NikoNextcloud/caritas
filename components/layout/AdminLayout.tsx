@@ -4,7 +4,7 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname, useRouter } from 'next/navigation'
 import {
-  Bell, Briefcase, CalendarDays, CheckSquare, ChevronRight, Download, HandHeart, History,
+  Bell, Briefcase, CalendarDays, CheckSquare, ChevronRight, Database, Download, HandHeart, History,
   HeartHandshake, LayoutDashboard, LogOut, Menu, Upload, User, Users,
 } from 'lucide-react'
 import { getAdminUser, logout, onAuth, startPresenceTracking } from '@/lib/auth'
@@ -37,6 +37,7 @@ const MENU_ITEMS: MenuItem[] = [
   { label: 'История', href: '/admin/history', icon: History, adminOnly: true },
   { label: 'Потребители', href: '/admin/users', icon: User, adminOnly: true },
   { label: 'Импорт', href: '/admin/import', icon: Upload, adminOnly: true },
+  { label: 'Supabase', href: '/admin/firebase', icon: Database, adminOnly: true },
 ]
 
 interface Props {
@@ -268,7 +269,7 @@ export default function AdminLayout({ children, userName = 'Потребител
   )
 }
 
-const ADMIN_PATHS = ['/admin/history', '/admin/users', '/admin/import']
+const ADMIN_PATHS = ['/admin/history', '/admin/users', '/admin/import', '/admin/firebase']
 
 function isAdminPath(pathname: string) {
   return ADMIN_PATHS.some(path => pathname === path || pathname.startsWith(`${path}/`))
@@ -288,6 +289,7 @@ function pageLabel(pathname: string) {
     '/admin/history': 'История',
     '/admin/users': 'Потребители',
     '/admin/import': 'Импорт',
+    '/admin/firebase': 'Supabase – потребление',
   }
   const match = Object.keys(labels).sort((a, b) => b.length - a.length).find(path => pathname === path || pathname.startsWith(`${path}/`))
   return match ? labels[match] : pathname

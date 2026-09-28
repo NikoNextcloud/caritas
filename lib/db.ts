@@ -1,7 +1,7 @@
 import { auth } from './firebase'
 import {
   countAppDocuments, deleteAppDocuments, getAppDocument, getAppDocuments,
-  getAppDocumentsByIds, updateAppDocument, upsertAppDocument, upsertAppDocuments,
+  getAppDocumentsByIds, getAppUsage, updateAppDocument, upsertAppDocument, upsertAppDocuments,
 } from './app-data'
 import type {
   BeneficiaryRequest, Beneficiary, Task, Employer, Notification, SearchParams,
@@ -154,6 +154,25 @@ export async function deleteUsers(ids: string[]) { const count = await deleteApp
 export async function replaceImportDocuments(items: Array<{ collectionName: 'beneficiaries' | 'beneficiaryRequests'; id: string; data: Record<string, unknown> }>) { await upsertAppDocuments(items.map(item => ({ collection_name: item.collectionName, id: item.id, data: item.data }))); clearCache('beneficiaries'); clearCache('beneficiaryRequests') }
 export async function getExistingImportIds(collectionName: 'beneficiaries' | 'beneficiaryRequests', ids: string[]) { return new Set((await getAppDocumentsByIds<Record<string, unknown>>(collectionName, ids)).map(item => item.id)) }
 export async function clearImportCollection(collectionName: 'beneficiaries' | 'beneficiaryRequests') { const count = await deleteAppDocuments(collectionName); clearCache(collectionName); return count }
+
+const CLEANABLE_COLLECTIONS = new Set([
+  'beneficiaryRequests', 'beneficiaries', 'schedule', 'tasks', 'employers',
+  'volunteers', 'donors', 'notifications', 'auditLogs',
+])
+
+export async function getSupabaseUsage() {
+  if (!(await currentAccess()).isAdmin) throw new Error('Само администратор има достъп до потреблението')
+  return getAppUsage()
+}
+
+export async function clearUsageCollection(collectionName: string) {
+  if (!(await currentAccess()).isAdmin) throw new Error('Само администратор може да изтрива данни')
+  if (!CLEANABLE_COLLECTIONS.has(collectionName)) throw new Error('Тази категория е защитена от изтриване')
+  const count = await deleteAppDocuments(collectionName)
+  clearCache(collectionName)
+  await auditChange('delete', collectionName, undefined, `Изтрити са всички ${count} записа от категория ${collectionName}`)
+  return count
+}
 
 export async function getExportData(dateFrom?: string, dateTo?: string) { let data = await visibleCollection<BeneficiaryRequest>('beneficiaryRequests'); if (dateFrom) data = data.filter(r => r.createdAt >= dateFrom); if (dateTo) data = data.filter(r => r.createdAt <= dateTo); return data }
 export async function getDashboardStats() { const [requests, tasks, totalBeneficiaries, totalEmployers, totalVolunteers, totalDonors] = await Promise.all([visibleCollection<BeneficiaryRequest>('beneficiaryRequests'), visibleCollection<Task>('tasks'), countAppDocuments('beneficiaries'), countAppDocuments('employers'), countAppDocuments('volunteers'), countAppDocuments('donors')]); return { totalRequests: requests.length, confirmedRequests: requests.filter(r => r.status === 'Потвърдено').length, pendingRequests: requests.filter(r => r.status === 'Чакащ').length, rejectedRequests: requests.filter(r => r.status === 'Отхвърлено').length, totalBeneficiaries, totalTasks: tasks.length, totalEmployers, totalVolunteers, totalDonors } }
