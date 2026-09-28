@@ -2,7 +2,7 @@
 import { useCallback, useRef, useState } from 'react'
 import AdminLayout from '@/components/layout/AdminLayout'
 import { auth, db } from '@/lib/firebase'
-import { collection, doc, getDoc, getDocs, writeBatch } from 'firebase/firestore'
+import { collection, doc, documentId, getDoc, getDocs, query, where, writeBatch } from 'firebase/firestore'
 import { AlertTriangle, CheckCircle, ChevronDown, ChevronUp, FileSpreadsheet, RefreshCw, Upload } from 'lucide-react'
 import toast, { Toaster } from 'react-hot-toast'
 import * as XLSX from 'xlsx'
@@ -31,6 +31,7 @@ interface ImportResult {
 }
 
 type WriteItem = { collectionName: 'beneficiaries' | 'beneficiaryRequests'; id: string; data: Record<string, unknown> }
+type AdminIdentity = { uid: string; name: string }
 
 async function requireAdmin() {
   await auth.authStateReady()
@@ -62,15 +63,32 @@ async function commitWrites(items: WriteItem[], onProgress: (value: number) => v
   }
 }
 
-async function importSheet(sheet: SheetPreview, onProgress: (value: number) => void): Promise<ImportResult> {
-  const admin = await requireAdmin()
+async function getExistingDocumentIds(collectionName: WriteItem['collectionName'], ids: string[]) {
+  const existing = new Set<string>()
+  const uniqueIds = Array.from(new Set(ids))
+
+  // Firestore supports up to 30 values for an `in` query. This reads only
+  // documents referenced by the import instead of downloading the collection.
+  for (let offset = 0; offset < uniqueIds.length; offset += 30) {
+    const idBatch = uniqueIds.slice(offset, offset + 30)
+    if (!idBatch.length) continue
+    const snapshot = await getDocs(query(
+      collection(db, collectionName),
+      where(documentId(), 'in', idBatch),
+    ))
+    snapshot.docs.forEach(item => existing.add(item.id))
+  }
+
+  return existing
+}
+
+async function importSheet(
+  sheet: SheetPreview,
+  admin: AdminIdentity,
+  onProgress: (value: number) => void,
+  existingDataWasCleared: boolean,
+): Promise<ImportResult> {
   const importedAt = new Date().toISOString()
-  const [beneficiarySnapshot, requestSnapshot] = await Promise.all([
-    getDocs(collection(db, 'beneficiaries')),
-    getDocs(collection(db, 'beneficiaryRequests')),
-  ])
-  const existingBeneficiaries = new Set(beneficiarySnapshot.docs.map(item => item.id))
-  const existingRequests = new Set(requestSnapshot.docs.map(item => item.id))
   const beneficiaries = new Map<string, Record<string, unknown>>()
   const requests = new Map<string, Record<string, unknown>>()
   const errors: string[] = []
@@ -104,6 +122,15 @@ async function importSheet(sheet: SheetPreview, onProgress: (value: number) => v
     }
   })
 
+  const beneficiaryIds = Array.from(beneficiaries.keys())
+  const requestIds = Array.from(requests.keys())
+  const [existingBeneficiaries, existingRequests] = existingDataWasCleared
+    ? [new Set<string>(), new Set<string>()]
+    : await Promise.all([
+        getExistingDocumentIds('beneficiaries', beneficiaryIds),
+        getExistingDocumentIds('beneficiaryRequests', requestIds),
+      ])
+
   const writes: WriteItem[] = [
     ...Array.from(beneficiaries, ([id, data]) => ({ collectionName: 'beneficiaries' as const, id, data })),
     ...Array.from(requests, ([id, data]) => ({ collectionName: 'beneficiaryRequests' as const, id, data })),
@@ -113,10 +140,10 @@ async function importSheet(sheet: SheetPreview, onProgress: (value: number) => v
   return {
     sheet: sheet.name,
     rows: sheet.rows.length,
-    beneficiariesCreated: Array.from(beneficiaries.keys()).filter(id => !existingBeneficiaries.has(id)).length,
-    beneficiariesUpdated: Array.from(beneficiaries.keys()).filter(id => existingBeneficiaries.has(id)).length,
-    requestsCreated: Array.from(requests.keys()).filter(id => !existingRequests.has(id)).length,
-    requestsUpdated: Array.from(requests.keys()).filter(id => existingRequests.has(id)).length,
+    beneficiariesCreated: beneficiaryIds.filter(id => !existingBeneficiaries.has(id)).length,
+    beneficiariesUpdated: beneficiaryIds.filter(id => existingBeneficiaries.has(id)).length,
+    requestsCreated: requestIds.filter(id => !existingRequests.has(id)).length,
+    requestsUpdated: requestIds.filter(id => existingRequests.has(id)).length,
     skipped,
     errors,
   }
@@ -172,7 +199,7 @@ export default function ImportPage() {
     setBusy(true)
     setResults([])
     try {
-      await requireAdmin()
+      const admin = await requireAdmin()
       if (clearBeforeImport) {
         setProgressLabel('Изчистване на текущите бенефициенти...')
         await deleteCollection('beneficiaries', setProgress)
@@ -184,7 +211,7 @@ export default function ImportPage() {
       for (const sheet of recognized) {
         setProgress(0)
         setProgressLabel(`Импорт на ${sheet.name}...`)
-        completed.push(await importSheet(sheet, setProgress))
+        completed.push(await importSheet(sheet, admin, setProgress, clearBeforeImport))
       }
       setResults(completed)
       const totalRows = completed.reduce((sum, result) => sum + result.rows, 0)
