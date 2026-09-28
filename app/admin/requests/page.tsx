@@ -103,6 +103,17 @@ export default function RequestsPage() {
     setPage(current => current + 1)
   }
 
+  function goToPage(targetPage: number) {
+    const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
+    const safePage = Math.min(Math.max(targetPage, 1), totalPages)
+    setCursors(current => {
+      const next = [...current]
+      next[safePage - 1] = safePage === 1 ? null : String((safePage - 1) * PAGE_SIZE)
+      return next
+    })
+    setPage(safePage)
+  }
+
   function openNew() {
     setEditing(EMPTY_REQUEST)
     setIsNew(true)
@@ -277,6 +288,7 @@ export default function RequestsPage() {
               page, total, perPage: PAGE_SIZE, hasNext,
               onNext: goNext,
               onPrevious: () => setPage(current => Math.max(1, current - 1)),
+              onPageChange: goToPage,
             }}
           />
         </div>

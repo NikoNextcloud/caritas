@@ -1,5 +1,5 @@
 'use client'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react'
 
 interface Column<T> {
@@ -25,6 +25,7 @@ interface Props<T extends { id: string }> {
     hasNext: boolean
     onNext: () => void
     onPrevious: () => void
+    onPageChange: (page: number) => void
   }
 }
 
@@ -33,6 +34,7 @@ export default function DataTable<T extends { id: string }>({
   serverPagination, rowClassName,
 }: Props<T>) {
   const [page, setPage] = useState(1)
+  const [pageInput, setPageInput] = useState('1')
   const [selected, setSelected] = useState<Set<string>>(new Set())
 
   const activePage = serverPagination?.page ?? page
@@ -41,6 +43,50 @@ export default function DataTable<T extends { id: string }>({
   const totalPages = Math.ceil(totalItems / activePerPage)
   const start = (activePage - 1) * activePerPage
   const pageData = serverPagination ? data : data.slice(start, start + activePerPage)
+
+  useEffect(() => {
+    setPageInput(String(activePage))
+  }, [activePage])
+
+  useEffect(() => {
+    if (!serverPagination && totalPages > 0 && page > totalPages) setPage(totalPages)
+  }, [page, serverPagination, totalPages])
+
+  function goToPage(value: string) {
+    const requestedPage = Number.parseInt(value, 10)
+    const targetPage = Number.isFinite(requestedPage)
+      ? Math.min(Math.max(requestedPage, 1), Math.max(totalPages, 1))
+      : activePage
+
+    setPageInput(String(targetPage))
+    if (targetPage === activePage) return
+    if (serverPagination) serverPagination.onPageChange(targetPage)
+    else setPage(targetPage)
+  }
+
+  const pageSelector = (
+    <label className="flex items-center gap-1.5 text-sm text-gray-600 whitespace-nowrap">
+      <span>Страница</span>
+      <input
+        type="number"
+        min={1}
+        max={Math.max(totalPages, 1)}
+        value={pageInput}
+        onChange={event => setPageInput(event.target.value)}
+        onBlur={event => goToPage(event.target.value)}
+        onKeyDown={event => {
+          if (event.key === 'Enter') {
+            event.preventDefault()
+            goToPage(event.currentTarget.value)
+            event.currentTarget.blur()
+          }
+        }}
+        className="h-8 w-16 rounded border border-gray-300 bg-white px-2 text-center text-sm text-gray-800 focus:border-[var(--brand-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--brand-primary)]"
+        aria-label={`Отиди на страница от 1 до ${Math.max(totalPages, 1)}`}
+      />
+      <span>от {Math.max(totalPages, 1)}</span>
+    </label>
+  )
 
   function toggleAll() {
     if (selected.size === pageData.length) {
@@ -170,7 +216,7 @@ export default function DataTable<T extends { id: string }>({
                 className="btn-default btn-sm disabled:opacity-40 disabled:cursor-not-allowed">
                 <ChevronLeft size={16} /> Назад
               </button>
-              <span className="text-sm text-gray-600">Страница {activePage}{totalPages ? ` от ${totalPages}` : ''}</span>
+              {pageSelector}
               <button onClick={serverPagination.onNext} disabled={!serverPagination.hasNext}
                 className="btn-default btn-sm disabled:opacity-40 disabled:cursor-not-allowed">
                 Напред <ChevronRight size={16} />
@@ -185,29 +231,7 @@ export default function DataTable<T extends { id: string }>({
               className="p-1.5 rounded hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
               <ChevronLeft size={16} />
             </button>
-
-            {Array.from({ length: Math.min(7, totalPages) }, (_, i) => {
-              let pageNum: number
-              if (totalPages <= 7) {
-                pageNum = i + 1
-              } else if (page <= 4) {
-                pageNum = i + 1
-              } else if (page >= totalPages - 3) {
-                pageNum = totalPages - 6 + i
-              } else {
-                pageNum = page - 3 + i
-              }
-              return (
-                <button key={pageNum} onClick={() => setPage(pageNum)}
-                  className={`w-8 h-8 rounded text-sm font-medium transition-colors
-                    ${page === pageNum
-                      ? 'bg-[var(--brand-primary)] text-white'
-                      : 'hover:bg-gray-100 text-gray-600'}`}>
-                  {pageNum}
-                </button>
-              )
-            })}
-
+            {pageSelector}
             <button onClick={() => setPage(p => p + 1)} disabled={page === totalPages}
               className="p-1.5 rounded hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
               <ChevronRight size={16} />
