@@ -17,7 +17,8 @@ export default function LoginPage() {
     if (!email || !password) { toast.error('Попълнете всички полета'); return }
     setLoading(true)
     try {
-      await login(email, password)
+      const user = await login(email, password)
+      window.sessionStorage.removeItem(`caritas-audit-login:${user.uid}`)
       router.push('/admin/dashboard')
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : ''

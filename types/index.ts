@@ -10,6 +10,7 @@ export interface AuditLog {
   id: string
   actorUid: string
   actorName: string
+  actorEmail?: string
   actorRole: UserRole
   action: AuditAction
   entityType: string

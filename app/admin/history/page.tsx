@@ -5,7 +5,7 @@ import type { ReactNode } from 'react'
 import AdminLayout from '@/components/layout/AdminLayout'
 import { clearAuditHistory, getAuditLogs } from '@/lib/db'
 import type { AuditAction, AuditLog, UserRole } from '@/types'
-import { Eye, History, LogIn, PencilLine, RefreshCcw, Search, ShieldCheck, Trash2 } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Eye, History, LogIn, PencilLine, RefreshCcw, Search, ShieldCheck, Trash2 } from 'lucide-react'
 import toast, { Toaster } from 'react-hot-toast'
 
 const ACTION_LABELS: Record<AuditAction, string> = {
@@ -41,6 +41,8 @@ const ENTITY_LABELS: Record<string, string> = {
   auditHistory: 'История',
 }
 
+const PAGE_SIZE = 50
+
 export default function HistoryPage() {
   const [logs, setLogs] = useState<AuditLog[]>([])
   const [loading, setLoading] = useState(true)
@@ -48,11 +50,13 @@ export default function HistoryPage() {
   const [search, setSearch] = useState('')
   const [actor, setActor] = useState('')
   const [action, setAction] = useState<AuditAction | ''>('')
+  const [page, setPage] = useState(1)
+  const [pageInput, setPageInput] = useState('1')
 
   async function load() {
     setLoading(true)
     try {
-      setLogs(await getAuditLogs(500))
+      setLogs(await getAuditLogs())
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Историята не може да бъде заредена')
     } finally {
@@ -82,17 +86,41 @@ export default function HistoryPage() {
 
   useEffect(() => { void load() }, [])
 
-  const actors = useMemo(() => Array.from(new Set(logs.map(log => log.actorName))).sort((a, b) => a.localeCompare(b, 'bg')), [logs])
+  const actors = useMemo(() => Array.from(new Map(logs.map(log => [log.actorUid, {
+    uid: log.actorUid,
+    name: log.actorName,
+    email: log.actorEmail || '',
+  }])).values()).sort((a, b) => a.name.localeCompare(b.name, 'bg')), [logs])
   const filtered = useMemo(() => {
     const needle = search.trim().toLocaleLowerCase('bg-BG')
     return logs.filter(log => {
-      if (actor && log.actorName !== actor) return false
+      if (actor && log.actorUid !== actor) return false
       if (action && log.action !== action) return false
       if (!needle) return true
-      return [log.actorName, log.description, log.entityType, log.entityId, log.path, ...(log.changedFields || [])]
+      return [log.actorName, log.actorEmail, log.actorUid, log.actorRole, log.description, log.entityType, log.entityId, log.path, ...(log.changedFields || [])]
         .filter(Boolean).some(value => String(value).toLocaleLowerCase('bg-BG').includes(needle))
     })
   }, [action, actor, logs, search])
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
+  const currentPage = Math.min(page, totalPages)
+  const visibleLogs = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE)
+
+  useEffect(() => {
+    setPage(1)
+    setPageInput('1')
+  }, [action, actor, search])
+
+  useEffect(() => {
+    setPageInput(String(currentPage))
+  }, [currentPage])
+
+  function goToPage(value: string) {
+    const requested = Number.parseInt(value, 10)
+    const target = Number.isFinite(requested) ? Math.min(Math.max(requested, 1), totalPages) : currentPage
+    setPage(target)
+    setPageInput(String(target))
+  }
 
   const changes = logs.filter(log => ['create', 'update', 'delete', 'import', 'role_change'].includes(log.action)).length
   const uniqueUsers = new Set(logs.map(log => log.actorUid)).size
@@ -112,7 +140,7 @@ export default function HistoryPage() {
       <div className="box-header flex-wrap gap-3">
         <div>
           <span className="box-title flex items-center gap-2"><ShieldCheck size={18} /> История на действията</span>
-          <p className="text-xs text-gray-500 mt-1">Вижда се само от администратор. Показват се последните 500 събития.</p>
+          <p className="text-xs text-gray-500 mt-1">Вижда се само от администратор. Показват се събитията на всички потребители.</p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           <button className="btn-default" onClick={() => void load()} disabled={loading || clearing}><RefreshCcw size={16} className={loading ? 'animate-spin' : ''} /> Обнови</button>
@@ -122,7 +150,7 @@ export default function HistoryPage() {
       <div className="box-body">
         <div className="grid grid-cols-1 lg:grid-cols-[1fr_230px_210px] gap-3 mb-4">
           <div className="relative"><Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" /><input className="form-control pl-9" placeholder="Търси по потребител, действие, запис или поле..." value={search} onChange={event => setSearch(event.target.value)} /></div>
-          <select className="form-control" value={actor} onChange={event => setActor(event.target.value)}><option value="">Всички потребители</option>{actors.map(name => <option key={name} value={name}>{name}</option>)}</select>
+          <select className="form-control" value={actor} onChange={event => setActor(event.target.value)}><option value="">Всички потребители</option>{actors.map(item => <option key={item.uid} value={item.uid}>{item.name}{item.email ? ` · ${item.email}` : ''}</option>)}</select>
           <select className="form-control" value={action} onChange={event => setAction(event.target.value as AuditAction | '')}><option value="">Всички действия</option>{Object.entries(ACTION_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
         </div>
 
@@ -130,9 +158,9 @@ export default function HistoryPage() {
           <table className="w-full text-sm min-w-[1050px]">
             <thead className="bg-gray-100 text-gray-700"><tr><th className="p-3 text-left">Дата и час</th><th className="p-3 text-left">Потребител</th><th className="p-3 text-left">Действие</th><th className="p-3 text-left">Раздел / запис</th><th className="p-3 text-left">Описание</th><th className="p-3 text-left">Променени полета</th></tr></thead>
             <tbody>
-              {loading ? <tr><td colSpan={6} className="p-10 text-center text-gray-500">Зареждане...</td></tr> : filtered.length === 0 ? <tr><td colSpan={6} className="p-10 text-center text-gray-500">Няма намерени събития</td></tr> : filtered.map(log => <tr key={log.id} className="border-t border-gray-200 odd:bg-white even:bg-gray-50/60 align-top">
+              {loading ? <tr><td colSpan={6} className="p-10 text-center text-gray-500">Зареждане...</td></tr> : filtered.length === 0 ? <tr><td colSpan={6} className="p-10 text-center text-gray-500">Няма намерени събития</td></tr> : visibleLogs.map(log => <tr key={log.id} className="border-t border-gray-200 odd:bg-white even:bg-gray-50/60 align-top">
                 <td className="p-3 whitespace-nowrap text-gray-600">{formatDate(log.createdAt)}</td>
-                <td className="p-3"><span className="font-semibold text-gray-900 block">{log.actorName}</span><span className="text-xs text-gray-500">{ROLE_LABELS[log.actorRole] || log.actorRole}</span></td>
+                <td className="p-3"><span className="font-semibold text-gray-900 block">{log.actorName}</span>{log.actorEmail && <span className="text-xs text-gray-600 block break-all">{log.actorEmail}</span>}<span className="text-xs text-gray-500 block">{ROLE_LABELS[log.actorRole] || log.actorRole}</span><span className="text-[10px] text-gray-400 block break-all" title="Уникален потребителски номер">UID: {log.actorUid}</span></td>
                 <td className="p-3"><ActionBadge action={log.action} /></td>
                 <td className="p-3"><span className="font-medium text-gray-800 block">{ENTITY_LABELS[log.entityType] || log.entityType}</span>{log.entityId && <span className="text-xs text-gray-500 break-all">ID: {log.entityId}</span>}{log.path && <span className="text-xs text-gray-500 block break-all">{log.path}</span>}</td>
                 <td className="p-3 text-gray-700">{log.description}</td>
@@ -141,7 +169,16 @@ export default function HistoryPage() {
             </tbody>
           </table>
         </div>
-        <p className="text-xs text-gray-500 mt-3">Показани: {filtered.length} от {logs.length} събития</p>
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+          <p className="text-xs text-gray-500">Показани: {filtered.length === 0 ? 0 : (currentPage - 1) * PAGE_SIZE + 1}–{Math.min(currentPage * PAGE_SIZE, filtered.length)} от {filtered.length} намерени · общо {logs.length} събития</p>
+          {totalPages > 1 && <div className="flex items-center gap-2">
+            <button className="btn-default btn-sm disabled:opacity-40" disabled={currentPage === 1} onClick={() => setPage(value => Math.max(1, value - 1))}><ChevronLeft size={16} /> Назад</button>
+            <label className="flex items-center gap-1.5 text-sm text-gray-600 whitespace-nowrap">Страница
+              <input type="number" min={1} max={totalPages} value={pageInput} onChange={event => setPageInput(event.target.value)} onBlur={event => goToPage(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); goToPage(event.currentTarget.value); event.currentTarget.blur() } }} className="h-8 w-16 rounded border border-gray-300 bg-white px-2 text-center text-sm text-gray-800 focus:border-[var(--brand-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--brand-primary)]" aria-label={`Отиди на страница от 1 до ${totalPages}`} /> от {totalPages}
+            </label>
+            <button className="btn-default btn-sm disabled:opacity-40" disabled={currentPage === totalPages} onClick={() => setPage(value => Math.min(totalPages, value + 1))}>Напред <ChevronRight size={16} /></button>
+          </div>}
+        </div>
       </div>
     </div>
   </AdminLayout>

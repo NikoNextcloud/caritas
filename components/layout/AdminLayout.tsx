@@ -79,7 +79,8 @@ export default function AdminLayout({ children, userName = 'Потребител
     const loginKey = `caritas-audit-login:${user.uid}`
     if (!window.sessionStorage.getItem(loginKey)) {
       window.sessionStorage.setItem(loginKey, '1')
-      void addAuditLog({ action: 'login', entityType: 'session', description: 'Вход в системата', path: '/auth/login' }).catch(() => {})
+      void addAuditLog({ action: 'login', entityType: 'session', description: 'Вход в системата', path: '/auth/login' })
+        .catch(error => console.error('Login audit log could not be written', error))
     }
   }), [router, userName])
 
@@ -92,7 +93,7 @@ export default function AdminLayout({ children, userName = 'Потребител
       entityId: pathname,
       description: `Отворена страница: ${pageLabel(pathname)}`,
       path: pathname,
-    }).catch(() => {})
+    }).catch(error => console.error('Page audit log could not be written', error))
   }, [authReady, pathname])
 
   useEffect(() => {

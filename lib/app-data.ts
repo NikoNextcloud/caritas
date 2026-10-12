@@ -84,6 +84,15 @@ export async function upsertAppDocument(collectionName: string, id: string, valu
   fail(error)
 }
 
+export async function insertAppDocument(collectionName: string, id: string, value: Record<string, unknown>) {
+  const { error } = await supabase.from('app_documents').insert({
+    collection_name: collectionName,
+    id,
+    data: value,
+  })
+  fail(error)
+}
+
 export async function upsertAppDocuments(items: AppDocument[]) {
   if (!items.length) return
   for (let offset = 0; offset < items.length; offset += 500) {

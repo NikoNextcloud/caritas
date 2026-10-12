@@ -2,7 +2,7 @@ import { auth } from './firebase'
 import { migrateLegacyPhoto, removeBeneficiaryPhoto, removeBeneficiaryPhotos, resolveBeneficiaryPhotoUrls } from './beneficiary-photo-storage'
 import {
   countAppDocuments, deleteAppDocuments, getAppDocument, getAppDocuments,
-  getAppDocumentsByIds, getAppUsage, updateAppDocument, upsertAppDocument, upsertAppDocuments,
+  getAppDocumentsByIds, getAppUsage, insertAppDocument, updateAppDocument, upsertAppDocument, upsertAppDocuments,
 } from './app-data'
 import type {
   BeneficiaryRequest, Beneficiary, Task, Employer, Notification, SearchParams,
@@ -22,7 +22,13 @@ async function loadCurrentAccess() {
   if (!user) throw new Error('Необходим е вход в системата')
   const profile = await getAppDocument<Partial<AdminUser>>('users', user.uid)
   const role = (profile?.role || 'user') as UserRole
-  return { uid: user.uid, name: profile?.displayName || user.displayName || user.email || 'Потребител', role, isAdmin: role === 'admin' }
+  return {
+    uid: user.uid,
+    name: profile?.displayName || user.displayName || user.email || 'Потребител',
+    email: profile?.email || user.email || '',
+    role,
+    isAdmin: role === 'admin',
+  }
 }
 
 export async function currentAccess() {
@@ -53,7 +59,7 @@ function newId() { return crypto.randomUUID() }
 
 export async function addAuditLog(data: { action: AuditAction; entityType: string; entityId?: string; description: string; changedFields?: string[]; path?: string }) {
   const access = await currentAccess()
-  await upsertAppDocument('auditLogs', newId(), {
+  await insertAppDocument('auditLogs', newId(), {
     actorUid: access.uid, actorName: access.name, actorRole: access.role, action: data.action,
     entityType: data.entityType, ...(data.entityId ? { entityId: data.entityId } : {}),
     description: data.description, ...(data.changedFields?.length ? { changedFields: data.changedFields } : {}),
@@ -65,10 +71,15 @@ async function auditChange(action: AuditAction, entityType: string, entityId: st
   try { await addAuditLog({ action, entityType, entityId, description, changedFields }) } catch (error) { console.error('Audit log could not be written', error) }
 }
 
-export async function getAuditLogs(resultLimit = 500) {
+export async function getAuditLogs(resultLimit?: number) {
   if (!(await currentAccess()).isAdmin) throw new Error('Само администратор има достъп до историята')
   const rows = await getAppDocuments<Record<string, unknown>>('auditLogs') as unknown as AuditLog[]
-  return rows.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || '')).slice(0, resultLimit)
+  const users = await getAppDocuments<Partial<AdminUser>>('users')
+  const emailByUid = new Map(users.map(user => [user.id, user.email || '']))
+  const sorted = rows
+    .map(log => ({ ...log, actorEmail: log.actorEmail || emailByUid.get(log.actorUid) || '' }))
+    .sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''))
+  return typeof resultLimit === 'number' ? sorted.slice(0, resultLimit) : sorted
 }
 
 export async function clearAuditHistory() {
