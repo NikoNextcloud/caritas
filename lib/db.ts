@@ -1,4 +1,5 @@
 import { auth } from './firebase'
+import { employerImportPatch, planEmployerImport, type EmployerImportRow } from './employer-transfer'
 import { migrateLegacyPhoto, removeBeneficiaryPhoto, removeBeneficiaryPhotos, resolveBeneficiaryPhotoUrls } from './beneficiary-photo-storage'
 import {
   countAppDocuments, deleteAppDocuments, getAppDocument, getAppDocuments,
@@ -160,6 +161,51 @@ export async function getEmployers(search?: string) { let data = (await visibleC
 export async function addEmployer(data: Omit<Employer, 'id' | 'createdAt' | 'updatedAt'>) { const id = newId(); await upsertAppDocument('employers', id, { ...data, ...await ownership(), createdAt: now(), updatedAt: now() }); clearCache('employers'); await auditChange('create', 'employer', id, 'Създаден е работодател', Object.keys(data)); return id }
 export async function updateEmployer(id: string, data: Partial<Employer>) { await updateAppDocument('employers', id, { ...withoutId(data), updatedAt: now() }); clearCache('employers'); await auditChange('update', 'employer', id, 'Редактиран е работодател', Object.keys(data)) }
 export async function deleteEmployer(id: string) { await deleteAppDocuments('employers', [id]); clearCache('employers'); await auditChange('delete', 'employer', id, 'Изтрит е работодател') }
+
+export async function importEmployers(rows: EmployerImportRow[], updateExisting = false, onProgress?: (completed: number, total: number) => void) {
+  const access = await currentAccess()
+  if (!access.isAdmin) throw new Error('Само администратор може да импортира работодатели')
+  if (!rows.length || rows.length > 5000) throw new Error('Изберете файл с между 1 и 5000 работодатели')
+  clearCache('employers')
+  const existing = await getEmployers()
+  const plan = planEmployerImport(rows, existing, updateExisting)
+  const invalid = plan.find(item => item.operation === 'error')
+  if (invalid) throw new Error(`Ред ${invalid.rowNumber}: ${invalid.message}`)
+  const changes = plan.filter(item => item.operation === 'create' || item.operation === 'update')
+  let completed = 0
+  let created = 0
+  let updated = 0
+  const byId = new Map(existing.map(employer => [employer.id, employer]))
+  try {
+    for (let offset = 0; offset < changes.length; offset += 100) {
+      const batch = changes.slice(offset, offset + 100)
+      const stamp = now()
+      await upsertAppDocuments(batch.map(item => {
+        const current = item.existingId ? byId.get(item.existingId) : undefined
+        return {
+          collection_name: 'employers',
+          id: current?.id || newId(),
+          data: {
+            ...(current ? withoutId(current) : { createdByUid: access.uid, createdByName: access.name, createdAt: stamp }),
+            ...employerImportPatch(item.values),
+            updatedAt: stamp,
+          },
+        }
+      }))
+      created += batch.filter(item => item.operation === 'create').length
+      updated += batch.filter(item => item.operation === 'update').length
+      completed += batch.length
+      onProgress?.(completed, changes.length)
+    }
+  } catch (error) {
+    await auditChange('import', 'employer', undefined, `Частичен импорт на работодатели: ${created} нови, ${updated} обновени. Импортът е прекъснат.`)
+    throw new Error(`Импортът е прекъснат. Записани: ${created} нови и ${updated} обновени. ${error instanceof Error ? error.message : 'Грешка при запис'}. Обновете прегледа преди нов опит.`)
+  } finally {
+    clearCache('employers')
+  }
+  await auditChange('import', 'employer', undefined, `Импорт на работодатели: ${created} нови, ${updated} обновени, ${plan.length - changes.length} пропуснати`)
+  return { created, updated, skipped: plan.length - changes.length }
+}
 export async function getVolunteers() { return (await visibleCollection<Volunteer>('volunteers')).sort((a, b) => `${a.lastName} ${a.firstName}`.localeCompare(`${b.lastName} ${b.firstName}`, 'bg')) }
 export async function addVolunteer(data: Omit<Volunteer, 'id' | 'createdAt' | 'updatedAt'>) { const id = newId(); await upsertAppDocument('volunteers', id, { ...data, ...await ownership(), createdAt: now(), updatedAt: now() }); clearCache('volunteers'); await auditChange('create', 'volunteer', id, 'Създаден е доброволец', Object.keys(data)); return id }
 export async function updateVolunteer(id: string, data: Partial<Volunteer>) { await updateAppDocument('volunteers', id, { ...withoutId(data), updatedAt: now() }); clearCache('volunteers'); await auditChange('update', 'volunteer', id, 'Редактиран е доброволец', Object.keys(data)) }

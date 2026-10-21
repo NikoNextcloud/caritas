@@ -5,6 +5,7 @@ import DataTable from '@/components/ui/DataTable'
 import Modal from '@/components/ui/Modal'
 import UserAssignment from '@/components/ui/UserAssignment'
 import JobPositionsSection from './JobPositionsSection'
+import EmployerTransfer from './EmployerTransfer'
 import { getEmployers, addEmployer, updateEmployer, deleteEmployer } from '@/lib/db'
 import type { Employer } from '@/types'
 import { BriefcaseBusiness, Building2, Plus, Search } from 'lucide-react'
@@ -100,13 +101,14 @@ export default function EmployersPage() {
         <div className="box-body">
           {section === 'employers' ? (
             <>
-              <div className="flex items-center gap-2 mb-4">
+              <div className="flex flex-wrap items-center gap-2 mb-4">
                 <div className="flex items-center gap-2 flex-1">
                   <input type="text" placeholder="Търси по наименование, ЕИК, град..."
                     className="form-control max-w-xs" value={query}
                     onChange={e => setQuery(e.target.value)} />
                   <Search size={16} className="text-gray-400" />
                 </div>
+                <EmployerTransfer employers={data} exportEmployers={filtered} loading={loading} onChanged={load} />
                 <button onClick={openNew} className="btn-primary flex-shrink-0">
                   <Plus size={16} /> Добави
                 </button>
