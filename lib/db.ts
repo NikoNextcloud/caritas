@@ -3,7 +3,7 @@ import { employerImportPatch, planEmployerImport, type EmployerImportRow } from 
 import { migrateLegacyPhoto, removeBeneficiaryPhoto, removeBeneficiaryPhotos, resolveBeneficiaryPhotoUrls } from './beneficiary-photo-storage'
 import {
   countAppDocuments, deleteAppDocuments, getAppDocument, getAppDocuments,
-  getAppDocumentsByIds, getAppUsage, insertAppDocument, updateAppDocument, upsertAppDocument, upsertAppDocuments,
+  getAppDocumentsByIds, getAppUsage, insertAppDocument, replaceAppDocumentIfUnchanged, updateAppDocument, upsertAppDocument, upsertAppDocuments,
 } from './app-data'
 import type {
   BeneficiaryRequest, Beneficiary, Task, Employer, Notification, SearchParams,
@@ -163,8 +163,11 @@ export async function updateEmployer(id: string, data: Partial<Employer>) { awai
 export async function deleteEmployer(id: string) { await deleteAppDocuments('employers', [id]); clearCache('employers'); await auditChange('delete', 'employer', id, 'Изтрит е работодател') }
 
 export async function importEmployers(rows: EmployerImportRow[], updateExisting = false, onProgress?: (completed: number, total: number) => void) {
-  const access = await currentAccess()
+  // A role can change while the tab remains open. Never authorize an import
+  // using the indefinitely cached role used for ordinary UI rendering.
+  const access = await loadCurrentAccess()
   if (!access.isAdmin) throw new Error('Само администратор може да импортира работодатели')
+  accessCache = { uid: access.uid, value: access }
   if (!rows.length || rows.length > 5000) throw new Error('Изберете файл с между 1 и 5000 работодатели')
   clearCache('employers')
   const existing = await getEmployers()
@@ -180,7 +183,19 @@ export async function importEmployers(rows: EmployerImportRow[], updateExisting 
     for (let offset = 0; offset < changes.length; offset += 100) {
       const batch = changes.slice(offset, offset + 100)
       const stamp = now()
-      await upsertAppDocuments(batch.map(item => {
+      // Updates are conditional, so an edit to positions or other fields made
+      // after our initial read stops this import instead of being overwritten.
+      for (const item of batch.filter(item => item.operation === 'update')) {
+        const current = byId.get(item.existingId!)!
+        await replaceAppDocumentIfUnchanged('employers', current.id, {
+          ...withoutId(current), ...employerImportPatch(item.values), updatedAt: stamp,
+        }, current.updatedAt)
+        updated++
+        completed++
+        onProgress?.(completed, changes.length)
+      }
+      const creates = batch.filter(item => item.operation === 'create')
+      await upsertAppDocuments(creates.map(item => {
         const current = item.existingId ? byId.get(item.existingId) : undefined
         return {
           collection_name: 'employers',
@@ -192,9 +207,8 @@ export async function importEmployers(rows: EmployerImportRow[], updateExisting 
           },
         }
       }))
-      created += batch.filter(item => item.operation === 'create').length
-      updated += batch.filter(item => item.operation === 'update').length
-      completed += batch.length
+      created += creates.length
+      completed += creates.length
       onProgress?.(completed, changes.length)
     }
   } catch (error) {
