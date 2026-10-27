@@ -73,6 +73,9 @@ export function planEmployerImport(rows: EmployerImportRow[], existing: Employer
     if (EMPLOYER_COLUMNS.some(column => (values[column.key]?.length || 0) > 10000)) return { ...item, operation: 'error', message: 'Прекалено дълга стойност (максимум 10000 знака)' }
 
     const byId = values.id ? existing.find(employer => employer.id === values.id) : undefined
+    if (values.id && !byId) {
+      return { ...item, operation: 'error', message: 'ID не съществува. Експортирайте актуален файл или премахнете ID за нов работодател.' }
+    }
     const byEik = values.eik ? existing.filter(employer => normalizeEik(employer.eik) === normalizeEik(values.eik)) : []
     if (byEik.length > 1 || (byId && byEik.length && byEik[0].id !== byId.id)) {
       return { ...item, operation: 'error', message: 'ID и ЕИК сочат различни или повече от един съществуващи записи' }

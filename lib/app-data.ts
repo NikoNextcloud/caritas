@@ -110,6 +110,18 @@ export async function updateAppDocument(collectionName: string, id: string, patc
   await upsertAppDocument(collectionName, id, { ...data, ...patch })
 }
 
+/** Optimistic lock: never overwrite a newer edit or recreate a deleted row. */
+export async function replaceAppDocumentIfUnchanged(collectionName: string, id: string, value: Record<string, unknown>, expectedUpdatedAt?: string) {
+  let request = supabase.from('app_documents').update({ data: value })
+    .eq('collection_name', collectionName).eq('id', id)
+  request = expectedUpdatedAt
+    ? request.eq('data->>updatedAt', expectedUpdatedAt)
+    : request.is('data->>updatedAt', null)
+  const { data, error } = await request.select('id')
+  fail(error)
+  if (data?.length !== 1) throw new Error('Работодателят е променен, изтрит или недостъпен. Обновете списъка и опитайте отново.')
+}
+
 export async function deleteAppDocuments(collectionName: string, ids?: string[]) {
   let request = supabase.from('app_documents').delete().eq('collection_name', collectionName)
   if (ids) {
